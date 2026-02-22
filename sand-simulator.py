@@ -140,9 +140,8 @@ def grid_cord():
     temp_grid_x = int(adjusted_x / block_size)
     temp_grid_y = int(mouse_y / block_size)
 
-    if 0 <= temp_grid_x < grid_width:
+    if 0 <= temp_grid_x < grid_width and  0 <= temp_grid_y < grid_height:
         grid_x = temp_grid_x
-    if 0 <= temp_grid_y < grid_height:
         grid_y = temp_grid_y
     
     return grid_x, grid_y
@@ -266,16 +265,20 @@ def all_overlay():
     # --- Hovered Block ---
     draw_text(f"Hovered: {blocks[hovered]['name']}", 16, padding(lines))
     draw_block_indicator(overlay_size - 50, padding(lines), blocks[hovered]['color'])
-    lines += 2
+    lines += 1
+    draw_text(f"GX: {grid_x}", 16, padding(lines))
+    draw_text(f"GY: {grid_y}", overlay_size/2 - 16, padding(lines))
 
     # --- Mouse ---
+    lines+=2
     draw_text("Mouse", 16, padding(lines))
     lines += 1
     draw_text(f"Pressed: {mouse_pressed}", 16, padding(lines))
     lines += 1
-    draw_text(f"X: {mouse_x}", 16, padding(lines))
-    lines += 1
-    draw_text(f"Y: {mouse_y}", 16, padding(lines))
+    draw_text(f"MX: {mouse_x}", 16, padding(lines))
+    draw_text(f"MY: {mouse_y}", overlay_size/2 - 16, padding(lines))
+
+    # --- grid ---
     
     # --- Subtitles ---
     lines += 2
@@ -307,7 +310,7 @@ def all_game():
         draw_lines()
 
     # Placement logic
-    if mouse_pressed:
+    if grid_rect.collidepoint(mouse_x, mouse_y)and mouse_pressed:
         if 0 <= grid_x < grid_width and 0 <= grid_y < grid_height:
             grid[grid_x, grid_y, 0] = selected
             grid[grid_x, grid_y, 1:4] = close_color(selected)
