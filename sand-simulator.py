@@ -29,8 +29,8 @@ grey = pygame.Color('#505050')
 muted = pygame.Color('#b4b4b4')
 white = pygame.Color('#f0f0f0')
 
-dark_theme = {'bg': black,'lines': green, 'muted': muted, 'text': white, 'debug': green}
-light_theme = {'bg': white, 'lines': green, 'muted': grey, 'text': black, 'debug': green}
+dark_theme = {'bg': black,'fg': grey, 'muted': muted, 'text': white, 'success': green,'danger':pink}
+light_theme = {'bg': white, 'fg': muted, 'muted': grey, 'text': black, 'success': green,'danger':pink}
 current_theme = dark_theme
 
 # variables
@@ -44,17 +44,14 @@ grid_width = int((screen_width - overlay_size) / block_size)
 grid_size = grid_height * grid_width
 grid_rect = pygame.Rect(overlay_size,0,screen_width - overlay_size,screen_height)
 
-grid_value  = np.zeros((grid_width, grid_height), dtype=np.uint8)
+grid_value  = np.ones((grid_width, grid_height), dtype=np.uint8)
 grid_color = np.zeros((grid_width, grid_height, 4), dtype=np.uint8)
 grid_active = np.zeros((grid_width, grid_height), dtype=bool)
 grid_active_next = np.zeros((grid_width, grid_height), dtype=bool)
 
 text_p = pygame.font.SysFont('Arial', 16)
 text_bold = pygame.font.SysFont('Arial', 16, bold=True)
-small_mouse = [(0, -1), (-1,  0), (1,  0), (0,  1)]
-big_mouse = [(2, 0), (0, -2), (-0, 2), (-2, -0)]
 neighbors_offset = [(-1, -1), (0, -1), (1, -1), (-1,  0), (1,  0), (-1,  1), (0,  1), (1,  1)]
-
 
 # user variable
 grid_x = 0 
@@ -73,11 +70,82 @@ blocks = {  0 : {'name': 'air'   , 'color': black  , 'density':0,'state': None, 
             4 : {'name': 'acid'   , 'color': teal   , 'density':9,'state': 'liqued', 'ability': 'destroy'},
             5 : {'name': 'steam'  , 'color': pink   , 'density':0,'state': 'gas', 'ability': None},}
 
-buttons = { "pause_btn": {"state": False, "rect": pygame.Rect(0, 0, 16, 16), "display": True, "label": 'Pause game'},
-            "clear_btn": {"state": False, "rect": pygame.Rect(0, 0, 16, 16), "display": True, "label": 'Clear screen'},
-            "debug_btn": {"state": False, "rect": pygame.Rect(0, 0, 16, 16), "display": True, "label": 'Debug Mode'},
-            "brush_btn": {"state": False, "rect": pygame.Rect(0, 0, 16, 16), "display": True, "label": 'Fine brush'},
-            "dark_btn" : {"state": False, "rect": pygame.Rect(0, 0, 16, 16), "display": True, "label": 'Dark Mode'},}
+buttons = {
+    "pause_btn": {
+        "clicked": False,
+        "rect": pygame.Rect(0, 0, 16, 16),
+        "display": True,
+        "label": "Pause game",
+        "group": None,
+        "value": None,
+    },
+
+    "clear_btn": {
+        "clicked": False,
+        "rect": pygame.Rect(0, 0, 16, 16),
+        "display": True,
+        "label": "Clear screen",
+        "group": None,
+        "value": None,
+    },
+
+    "debug_btn": {
+        "clicked": False,
+        "rect": pygame.Rect(0, 0, 16, 16),
+        "display": True,
+        "label": "Debug Mode",
+        "group": None,
+        "value": None,
+    },
+
+    "dark_btn": {
+        "clicked": False,
+        "rect": pygame.Rect(0, 0, 16, 16),
+        "display": True,
+        "label": "Dark Mode",
+        "group": None,
+        "value": None,
+    },
+
+    "brush_sm_btn": {
+        "clicked": False,
+        "rect": pygame.Rect(0, 0, 16, 16),
+        "display": True,
+        "label": "Brush sm",
+        "group": "brush",
+        "value": [(0, -1), (0, 1), (0, 0), (-1,  0), (1,  0)],
+    },
+
+    "brush_md_btn": {
+        "clicked": True,
+        "rect": pygame.Rect(0, 0, 16, 16),
+        "display": True,
+        "label": "Brush md",
+        "group": "brush",
+        "value": [(x, y) for x in range(-1, 2) for y in range(-1, 2)],
+    },
+
+    "brush_lg_btn": {
+        "clicked": False,
+        "rect": pygame.Rect(0, 0, 16, 16),
+        "display": True,
+        "label": "Brush lg",
+        "group": "brush",
+        "value": [(x, y) for x in range(-2, 3) for y in range(-2, 3)],
+    },
+}
+
+for key, block in blocks.items():
+    buttons[f'block_{key}_btn'] = {
+        "clicked": False,
+        "display": False,
+        "label": key,
+        "group": "select",
+        "value": key,
+        "rect": pygame.Rect(0, 0, 0, 0)
+    }
+
+current_brush = [(x, y) for x in range(-1, 2) for y in range(-1, 2)]
 
 # generate palette
 delta = 10
@@ -133,7 +201,7 @@ def draw_all_button(color=None,radius = 7):
             center = (btn['rect'].x + radius, btn['rect'].y + radius)
             if color == None: color = current_theme['text']
 
-            if btn['state']:
+            if btn['clicked']:
                 pygame.draw.circle(screen, color, center, radius - 4)
             pygame.draw.circle(screen, current_theme["text"], center, radius, 2)
 
@@ -152,7 +220,7 @@ def active_all_buttons():
         rect = btn['rect']
 
         if rect.collidepoint(mouse_x, mouse_y):
-            btn['state'] = not btn['state']
+            btn['clicked'] = not btn['clicked']
             logs_add(f"clicked {btn['label']}")
             return           
 
@@ -164,23 +232,34 @@ def draw_text(text, x, y, color=None, bold=False ):
     text_surface = text_bold.render(text, True, color) if bold else text_p.render(text, True, color)
     screen.blit(text_surface, (x, y))
     
-def draw_demo_block(x, y, color=None,radius = 2):
+def draw_demo_block(x, y, color=None,width=0,radius = 2):
     block_rect = pygame.Rect(x, y, 14, 14)
     if color == None: color = current_theme['text']
-    pygame.draw.rect(screen, color, block_rect, border_radius=radius)
+    pygame.draw.rect(screen, color, block_rect,width=width, border_radius=radius)
 
 def draw_grid_lines():
     for x in range(grid_rect.left, screen_width + 1, block_size):
-        pygame.draw.line(screen, current_theme['debug'], (x, 0), (x, screen_height))
+        pygame.draw.line(screen, current_theme['fg'], (x, 0), (x, screen_height))
         
     for y in range(0, screen_height + 1, block_size):
-        pygame.draw.line(screen, current_theme['debug'], (grid_rect.left, y), (screen_width, y))
+        pygame.draw.line(screen, current_theme['fg'], (grid_rect.left, y), (screen_width, y))
+
+def draw_brush():
+    for mx, my in current_brush:
+        x = overlay_size + (grid_x + mx) * block_size
+        y = (grid_y + my) * block_size
+        pygame.draw.rect(
+            screen,
+            current_theme['text'],
+            pygame.Rect(x , y , block_size, block_size),
+            1
+        )
 
 # --- Simulation ---
-def is_replacable(x, y,x1,y1):
-    before = blocks[grid_value[x,y]]['density']
-    after = blocks[grid_value[x1,y1]]['density']
-    if before > after :
+def is_denser(x, y,x1,y1):
+    density_before = blocks[grid_value[x,y]]['density']
+    density_after = blocks[grid_value[x1,y1]]['density']
+    if density_before > density_after :
         return True
     return False
 
@@ -228,24 +307,24 @@ def move(x, y, dx=0, dy=0):
         swap(x, y, mx, my)
         return True
 
-    # check if is replacable
-    if is_replacable(x, y, mx, my):
+    # check if is denser
+    if is_denser(x, y, mx, my):
 
         # destroy if acid 
         if blocks[grid_value[x, y]]['ability'] == 'destroy':
             destroy(x, y, mx, my)
             return True
 
-        # swap as replacable
+        # swap as denser
         swap(x, y, mx, my)
         return True
 
     return False
 
 def add_neighbour_block(x, y):
-    for dx, dy in neighbors_offset:
+    for dx, dy in current_brush:
         # chance to not add
-        if random.randint(0, 1): continue
+        # if random.randint(0, 1): continue
         
         # add neighbour
         mx, my = x + dx, y + dy
@@ -255,7 +334,7 @@ def add_neighbour_block(x, y):
             grid_value[mx, my] = selected
             grid_color[mx, my] = neighbors_color
 
-def draw_all_block(x,y):
+def draw_block(x,y):
     screen_y = block_size * y
     screen_x = overlay_size + block_size * x 
 
@@ -263,8 +342,9 @@ def draw_all_block(x,y):
     pygame.draw.rect(screen, grid_color[x, y], pygame.Rect(screen_x, screen_y, block_size, block_size))
 
     # draw highlight if in debug mode
-    if grid_active[x,y] and buttons['debug_btn']['state']:
-        pygame.draw.rect(screen, current_theme['lines'], pygame.Rect(screen_x, screen_y, block_size, block_size),1)
+    if buttons['debug_btn']['clicked']:
+        color = current_theme['danger' if grid_active[x,y] else 'success']
+        pygame.draw.rect(screen, color, pygame.Rect(screen_x, screen_y, block_size, block_size),1)
 
 def simulation_block(x,y):
     block = blocks[grid_value[x, y]]['name']
@@ -316,7 +396,7 @@ def game():
     pygame.draw.rect(screen, current_theme["bg"], grid_rect)
 
     # grid button
-    if buttons["debug_btn"]["state"]:
+    if buttons["debug_btn"]["clicked"]:
         draw_grid_lines()
 
     # Placement logic
@@ -326,8 +406,7 @@ def game():
             grid_color[grid_x, grid_y] = get_close_color(selected)
             toggle_in_active_grid(grid_x,grid_y)
             
-            if not buttons["brush_btn"]["state"]:
-                add_neighbour_block(grid_x,grid_y)
+            add_neighbour_block(grid_x,grid_y)
 
     # loop bottom to top
     for y in range(grid_height - 1, -1, -1):
@@ -337,10 +416,10 @@ def game():
         for x in x_order:
             if grid_value[x, y]:
                 # draw
-                draw_all_block(x, y)
+                draw_block(x, y)
 
                 # Simulation
-                if buttons["pause_btn"]["state"]:
+                if buttons["pause_btn"]["clicked"]:
                     toggle_in_active_grid(x,y)
                 else:
                     simulation_block(x, y)
@@ -368,25 +447,23 @@ def overlay():
     for btn in buttons.values():
         if btn['display']:
             lines += 1
-            draw_text(btn["label"], 32, calculate_padding(lines))
+            draw_text(str(btn["label"]), 32, calculate_padding(lines))
             btn['rect'] = pygame.Rect(8 ,calculate_padding(lines),overlay_size - 16,16)
     
     # --- shortcuts ---
-    lines += 2
-    draw_text('Blocks', 8, calculate_padding(lines),bold=True)
-    for key,block in blocks.items():
+    for key, block in blocks.items():
         lines += 1
-        draw_demo_block(8, calculate_padding(lines), block['color'])
-        draw_text(f'{block['name'].capitalize()} ({key})', 32, calculate_padding(lines))
-        buttons[f'{block['name']}_btn'] = {
-            "state": False,
-            "rect": pygame.Rect(8, calculate_padding(lines), overlay_size - 16, 16),
-            "display": False,
-            "label": key
-        }
+        y = calculate_padding(lines)
+
+        draw_demo_block(8, y, block['color'])
+        draw_text(f"{block['name'].capitalize()} ({key})", 32, y)
+
+        buttons[f'block_{key}_btn']["rect"] = pygame.Rect(
+            8, y, overlay_size - 16, 16
+        )
 
     # --- debug mode ---
-    if buttons['debug_btn']['state']: # stats
+    if buttons['debug_btn']['clicked']:
         lines += 2
         draw_text("Debug Menu", 8, calculate_padding(lines),bold=True)
 
@@ -397,11 +474,13 @@ def overlay():
 
         # active blocks
         lines += 1
-        draw_text(f"Alive {np.count_nonzero(grid_active):05d}", 8, calculate_padding(lines))    
+        draw_demo_block(8, calculate_padding(lines), current_theme['danger'] , 1)
+        draw_text(f"Alive {np.count_nonzero(grid_active):05d}", 32, calculate_padding(lines))    
 
         # total blocks
         lines += 1
-        draw_text(f"Total {np.count_nonzero(grid_value):05d}", 8, calculate_padding(lines)) 
+        draw_demo_block(8, calculate_padding(lines), current_theme['text'], 1)
+        draw_text(f"Total {np.count_nonzero(grid_value):05d}", 32, calculate_padding(lines)) 
 
         # hovered
         lines += 2
@@ -419,6 +498,12 @@ def overlay():
             lines += 1
             draw_text(log , 8, calculate_padding(lines))
 
+# initital color set for filled word can be removed
+for y in range(grid_height):
+    for x in range(grid_width):
+        if grid_value[x, y]:
+            grid_color[x, y] = get_close_color(grid_value[x, y])
+
 # main loop
 while run:
     mouse_x, mouse_y = pygame.mouse.get_pos()
@@ -426,7 +511,7 @@ while run:
     direction = not direction
 
     hover_all_button()
-
+    
     # event loop
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -450,37 +535,45 @@ while run:
                 selected = key_num
                 logs_add(f"{blocks[before]['name']} to {blocks[selected]['name']}")
             if event.key in [pygame.K_SPACE,pygame.K_RETURN]:
-                buttons['pause_btn']['state'] = not buttons['pause_btn']['state']
+                buttons['pause_btn']['clicked'] = not buttons['pause_btn']['clicked']
 
 
     # hoverred block
     hovered = grid_value[grid_x, grid_y]
     
     # theme change 
-    current_theme = dark_theme if buttons["dark_btn"]["state"] else  light_theme
+    current_theme = dark_theme if buttons["dark_btn"]["clicked"] else  light_theme
 
     # clear screen
-    if buttons["clear_btn"]["state"]:
+    if buttons["clear_btn"]["clicked"]:
         grid_value = np.zeros((grid_width, grid_height), dtype=np.uint8)
         grid_color = np.zeros((grid_width, grid_height, 4), dtype=np.uint8)
-        buttons["clear_btn"]["state"] = False
+        buttons["clear_btn"]["clicked"] = False
 
-    # select block
-    for btnname, btn in buttons.items():
-        if btn["state"] and btnname.endswith("_btn"):
-            try:
-                block_id = btn['label']
-                if block_id in blocks:
-                    selected = block_id
-            except ValueError:
-                pass
-        
+    
+    
+    for name, data in buttons.items():
+        # brush size   
+        if data["group"] == "brush":
+            if data["clicked"]:
+                current_brush = data['value']
+            data["clicked"] = False
+
+        # select block
+        if data["group"] == "select":
+            if data["clicked"]:
+                selected = data['value']
+                data["clicked"] = False            
+
     # partations
     game()
     overlay()
 
     grid_active[:] = grid_active_next
     grid_active_next.fill(False)
+
+    if buttons['debug_btn']['clicked']:
+        draw_brush()
 
     # update 
     pygame.display.update()
