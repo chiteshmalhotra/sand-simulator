@@ -7,7 +7,7 @@ mainclock = pygame.time.Clock()
 
 # main variables
 screen_size= 700
-overlay_size = 150
+overlay_size = 160
 
 # screen
 screen_height = screen_size
@@ -75,9 +75,9 @@ blocks = {  0 : {'name': 'air'   , 'color': black  , 'density':0,'state': None, 
 
 buttons = { "pause_btn": {"state": False, "rect": pygame.Rect(0, 0, 16, 16), "display": True, "label": 'Pause game'},
             "clear_btn": {"state": False, "rect": pygame.Rect(0, 0, 16, 16), "display": True, "label": 'Clear screen'},
-            "brush_btn": {"state": False, "rect": pygame.Rect(0, 0, 16, 16), "display": True, "label": 'Brush SM'},
-            "dark_btn" : {"state": False, "rect": pygame.Rect(0, 0, 16, 16), "display": True, "label": 'Dark Mode'},
-            "debug_btn": {"state": False, "rect": pygame.Rect(0, 0, 16, 16), "display": True, "label": 'Debug Mode'}}
+            "debug_btn": {"state": False, "rect": pygame.Rect(0, 0, 16, 16), "display": True, "label": 'Debug Mode'},
+            "brush_btn": {"state": False, "rect": pygame.Rect(0, 0, 16, 16), "display": True, "label": 'Fine brush'},
+            "dark_btn" : {"state": False, "rect": pygame.Rect(0, 0, 16, 16), "display": True, "label": 'Dark Mode'},}
 
 # generate palette
 delta = 10
@@ -378,11 +378,11 @@ def overlay():
         lines += 1
         draw_demo_block(8, calculate_padding(lines), block['color'])
         draw_text(f'{block['name'].capitalize()} ({key})', 32, calculate_padding(lines))
-        buttons[f'{key}_btn'] = {
+        buttons[f'{block['name']}_btn'] = {
             "state": False,
             "rect": pygame.Rect(8, calculate_padding(lines), overlay_size - 16, 16),
             "display": False,
-            "label": f'{key}_btn'
+            "label": key
         }
 
     # --- debug mode ---
@@ -406,11 +406,11 @@ def overlay():
         # hovered
         lines += 2
         draw_demo_block(8, calculate_padding(lines), blocks[hovered]['color'])
-        draw_text(f"{blocks[hovered]['name']}", 32, calculate_padding(lines))
+        draw_text(f"hovered {blocks[hovered]['name']}", 32, calculate_padding(lines))
         lines += 1
-        draw_text(f"GX {grid_x+1:03d}   GY {grid_y+1:03d}", 8, calculate_padding(lines))
+        draw_text(f"Grid       X {grid_x+1:03d} Y {grid_y+1:03d}", 8, calculate_padding(lines))
         lines += 1
-        draw_text(f"MX {mouse_x:03d}  MY {mouse_y:03d}", 8, calculate_padding(lines))
+        draw_text(f"Mouse  X {mouse_x:03d} Y {mouse_y:03d}", 8, calculate_padding(lines))
 
         # Subtitles
         lines += 2
@@ -469,7 +469,7 @@ while run:
     for btnname, btn in buttons.items():
         if btn["state"] and btnname.endswith("_btn"):
             try:
-                block_id = int(btnname.replace("_btn", ""))
+                block_id = btn['label']
                 if block_id in blocks:
                     selected = block_id
             except ValueError:
