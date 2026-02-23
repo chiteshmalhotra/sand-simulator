@@ -2,6 +2,12 @@
 
 **PySand** is a real-time 2D physics simulation built with Python and Pygame. It simulates the behavior of different materials—solids, liquids, and gases—based on density and state-of-the-art cellular automata rules.
 
+Default view
+<img width="1075" height="882" alt="default" src="https://github.com/user-attachments/assets/0ba049e7-5790-4383-a682-c32b06982951" />
+
+Dark theme + debug mode
+<img width="1075" height="882" alt="darkmode_with_debugmenu" src="https://github.com/user-attachments/assets/dab6a9dc-bcca-48f7-bd9a-d20e8abed4cf" />
+
 ## 🚀 Features
 
 * **Diverse Materials**: Each block has unique properties including density, state (solid, liquid, gas), and special abilities (e.g., Acidic destruction).
