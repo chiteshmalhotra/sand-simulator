@@ -213,57 +213,69 @@ class Radiogroup:
 
     def select(self, selected_radio):
         for radio in self.radios:
-            radio.selected = False
-        selected_radio.selected = True
-
+            radio.istoggled = False
+        selected_radio.istoggled = True
 
 class Radio():
-    def __init__(self, rect, group: Radiogroup,click_action=None,label ='', toggled = False, color = False):
+    def __init__(self, rect, group: Radiogroup,
+                 click_action=None,
+                 label='',
+                 toggled=False,
+                 color=None):
+
         self.rect = rect
         self.group = group
         group.add(self)
-        self.ishovered = True
-        self.istoggled = toggled 
+
+        self.istoggled = toggled
+        self.ishovered = False
         self.click_action = click_action
         self.label = label
-        self.color = color
-        self.font = pygame.font.SysFont(None, 24)
+        self.custom_color = color
+        self.font = pygame.font.SysFont(None, 22)
 
     def draw(self, surface):
-        if self.color:
-            self.bg_color = self.color if self.istoggled else get_darker_color(self.color)
+
+        # --- Base background ---
+        if self.custom_color is not None:
+            bg_color = self.custom_color
         else:
-            self.bg_color = current_theme["text" if self.istoggled else "bg"]
-        self.text_color = current_theme["bg" if self.istoggled else "text"]
-        # self.text = self.alt_label if self.isactive else self.default_label
+            bg_color = current_theme["bg"]
 
-        pygame.draw.rect(surface, self.bg_color, self.rect,)
-        pygame.draw.rect(surface, current_theme["fg"], self.rect, 1)
+        # --- Hover effect (subtle brightness) ---
+        if self.ishovered and not self.istoggled:
+            bg_color = (
+                min(255, bg_color[0] + 20),
+                min(255, bg_color[1] + 20),
+                min(255, bg_color[2] + 20)
+            )
 
-        label = self.font.render(self.label, True, self.text_color)
-        surface.blit(label, label.get_rect(center=self.rect.center))
+        pygame.draw.rect(surface, bg_color, self.rect)
+
+        # --- Toggled highlight ---
+        if self.istoggled:
+            pygame.draw.rect(surface, current_theme["text"], self.rect, 3)
+            border_width = 3
+            border_color = current_theme["text"]
+        else:
+            pygame.draw.rect(surface, current_theme["fg"], self.rect, 1)
+
+        # --- Label ---
+        if self.label:
+            text_color = current_theme["text"]
+            label_surface = self.font.render(self.label, True, text_color)
+            surface.blit(label_surface, label_surface.get_rect(center=self.rect.center))
 
     def update(self):
-        if self.rect.collidepoint(mouse_x, mouse_y):
-            self.ishovered = True
-            # logs_add(f'{self.text} btn hovered')
-            return True
-        else:
-            self.ishovered = False
-            return False
+        self.ishovered = self.rect.collidepoint(mouse_x, mouse_y)
+        return self.ishovered
 
     def handle_event(self):
         if event.type == pygame.MOUSEBUTTONDOWN:
-            if self.rect.collidepoint(mouse_x,mouse_y):
-                self.istoggled  = True
+            if self.ishovered:
                 self.group.select(self)
                 if self.click_action:
                     self.click_action()
-            else:
-                self.istoggled = False
-        
-    def click(self):
-        self.group.select(self)
 
 # --- btn funstions ---
 def pause_game():
@@ -292,7 +304,7 @@ def set_selected_block(block):
     global selected_block
     selected_block = block
 
-# --- btns ---
+# --- Adding btns ---
 btns = []
 start_y = 30
 btn_height = 30
@@ -327,13 +339,13 @@ for index , btn_data in enumerate(buttons_config):
     else:
         btn_rect = pygame.Rect(0, start_y, overlay_size/2, btn_height)
 
-    btn = Button( btn_rect, btn_data["default_label"], btn_data["alt_label"], btn_data["click_action"])
+    btn = Button( rect= btn_rect, default_label= btn_data["default_label"],alt_label= btn_data["alt_label"],click_action= btn_data["click_action"])
     btns.append(btn)
 
 
-
+# --- Adding btns ---
 radio_all = []
-radiogroup1 = Radiogroup("brush_group")
+brush_group = Radiogroup("brush_group")
 
 x = 0
 start_y += btn_height
@@ -345,7 +357,7 @@ for label, brush in brushes.items():
 
     btn = Radio(
         btn_rect,
-        radiogroup1,
+        brush_group,
         click_action,
         label=label,
         toggled=(current_brush_label == label)
@@ -357,10 +369,16 @@ for label, brush in brushes.items():
 
 x = 0
 start_y += btn_height *2
+block_group = Radiogroup("block_group")
 for index ,block  in enumerate(blocks.keys()):
     btn_rect = pygame.Rect(x, start_y, overlay_size/5, btn_height)    
     click_action = lambda block = block: set_selected_block(block)
-    btn = Radio( btn_rect, radiogroup1, click_action,color = blocks[block]['color'])
+    btn = Radio( 
+        btn_rect, 
+        block_group, 
+        click_action,
+        color = blocks[block]['color'],
+        toggled=(selected_block == index))
     radio_all.append(btn)
     x += overlay_size/5
 
