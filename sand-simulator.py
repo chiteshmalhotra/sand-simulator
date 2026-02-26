@@ -6,7 +6,6 @@ pygame.init()
 mainclock = pygame.time.Clock()
 
 # --- variables ---
-
 screen_height = 600
 screen_width = 800
 screen = pygame.display.set_mode((screen_width, screen_height)) 
@@ -18,7 +17,6 @@ theme_bg   = (255, 255, 255)
 theme_success = (166, 209, 137)
 theme_danger  = (226, 117, 117)
 
-# --- game variables ---
 run = True
 direction = True
 block_size = 5
@@ -27,28 +25,20 @@ chunk_size = block_size * 10
 font = pygame.font.SysFont(None, 24)
 pygame.display.set_caption("Sand Simulator 3000")
 
-# overlay variables
 overlay_h = 40
 overlay_rect = pygame.Rect(0, 0, screen_width, overlay_h)
 
-# grid variables
 grid_height = (screen_height - overlay_h) // block_size
 grid_width  = screen_width // block_size
 grid_rect = pygame.Rect( 0, overlay_h, screen_width, screen_height - overlay_h)
 
-# using numpy arrays for better performance
 grid_value = np.zeros((grid_width, grid_height), dtype=np.uint8)
 grid_color = np.zeros((grid_width, grid_height, 3), dtype=np.uint8)
 
 grid_active = np.zeros((grid_width, grid_height), dtype=bool)
 grid_active_next = np.zeros((grid_width, grid_height), dtype=bool)
 
-
-neighbors_offset = [
-    (-1, -1), (0, -1), (1, -1),
-    (-1,  0),          (1,  0),
-    (-1,  1), (0,  1), (1,  1)
-]
+neighbors_offset = [(-1, -1), (0, -1), (1, -1),(-1,  0), (1,  0), (-1,  1), (0,  1), (1,  1)]
 
 # --- user variable ---
 grid_x = 0 
@@ -121,7 +111,8 @@ class Radiogroup:
         selected_radio.toggled = True
 
 class Button:
-    def __init__(self, rect = None, circle = None, action=None, label='', color= (255,255,255),text_color = (0,0,0) , toggled=None, group=None, shortcut=None):
+    def __init__(self, rect = None, circle = None, action=None, label='', color= (255,255,255),text_color = (0,0,0) ,
+                 toggled=None, group=None, shortcut=None, tooltip_text=None):
 
         self.rect = rect
 
@@ -135,6 +126,7 @@ class Button:
         self.group = group
 
         self.shortcut = shortcut
+        self.tooltip_text = tooltip_text
 
         self.temp_circle = self.rect.height//2
 
@@ -181,7 +173,10 @@ class Button:
 
     def handle_hover(self):
         self.hovered = self.rect.collidepoint((mouse_x, mouse_y))
-        return self.hovered , self.label if self.hovered else None
+        if self.hovered and self.tooltip_text:
+            global tooltip_text
+            tooltip_text = f"{self.tooltip_text}"
+        return self.hovered
 
     def handle_event(self, event):
         # mouse click
@@ -255,7 +250,12 @@ y = padding
 h = 26
 
 # --- action buttons ---
-for label, action, toggled, shortcut in [("Pause", pause_game, False,pygame.K_SPACE),("Debug", toggle_debug, False, pygame.K_d),("Reset", Reset, None, pygame.K_BACKSPACE)]:
+action_buttons = [
+    ("Pause", pause_game, False, pygame.K_SPACE, "Pause the game (Space)"),
+    ("Debug", toggle_debug, False, pygame.K_d, "Toggle debug mode (D)"),
+    ("Reset", Reset, None, pygame.K_BACKSPACE, "Reset the game (Backspace)"),
+]
+for label, action, toggled, shortcut, tooltip in action_buttons:
     w = font.size(label)[0] + 16
     button_list.append(
         Button(
@@ -265,6 +265,7 @@ for label, action, toggled, shortcut in [("Pause", pause_game, False,pygame.K_SP
             toggled=toggled,
             color=theme_muted,
             shortcut=shortcut,
+            tooltip_text=tooltip,  # <-- added tooltip
         )
     )
     x += w + 4
@@ -284,6 +285,7 @@ for block_id, block in blocks.items():
             toggled=(selected_block == block_id),
             group=block_group,
             shortcut=pygame.K_0 + block_id,
+            tooltip_text=f"Select {block['name'].capitalize()} ({block_id})"  # <-- tooltip here
         )
     )
     x += font.size(str(block_id))[0] + 12
@@ -302,6 +304,7 @@ for key in brushes:
             color=theme_muted,
             toggled=(current_brush == key),
             group=brush_group,
+            tooltip_text=f"Select brush size ({key.capitalize()})"  # <-- tooltip here
         )
     )
     x += font.size(str(key))[0] + 12
@@ -521,6 +524,13 @@ def game():
     
 # --- Main loop ---
 while run:   
+    # --- Variables ---
+    tooltip_text = None
+    mouse_clicked = False
+    direction = not direction
+    mouse_x, mouse_y = pygame.mouse.get_pos()
+    grid_x, grid_y = get_grid_cords()
+    
     # --- Event handling ---
     for event in pygame.event.get():
         for btn in button_list:
@@ -555,14 +565,8 @@ while run:
     hovering_button = False
     for btn in button_list:
         btn.handle_draw()
-        hovered, tooltip_text = btn.handle_hover()
+        hovering_button = btn.handle_hover()
     pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND if hovering_button else pygame.SYSTEM_CURSOR_ARROW)
-
-    # --- Variables ---
-    mouse_clicked = False
-    direction = not direction
-    mouse_x, mouse_y = pygame.mouse.get_pos()
-    grid_x, grid_y = get_grid_cords()
 
     # --- Tooltips ---
     if tooltip_text:
