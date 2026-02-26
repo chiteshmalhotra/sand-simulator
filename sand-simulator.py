@@ -78,7 +78,7 @@ blocks = {
 
 # --- brush ---
 create_brush = lambda r : [(x,y) for x in range(-r, r+1) for y in range(-r, r+1) if x*x + y*y <= r*r]
-brushes = [create_brush(2),create_brush(4),create_brush(6)]
+brushes = [create_brush(2),create_brush(4),create_brush(6),create_brush(8)]
 current_brush = 1
 
 # --- block_palette ---
@@ -186,17 +186,18 @@ class Button:
         if not self.rect.collidepoint(mouse_x, mouse_y):
             return
 
-        # If part of a group → group controls toggling
+        # group controls toggling
         if self.group:
             self.group.select(self)
 
-        # If standalone toggle button
+        # standalone toggle button
         elif self.toggled is not None:
             self.toggled = not self.toggled
 
-        # Run action safely
+        # default
         if self.action:
             self.action()
+
 
 class CircleButton(Button):
     def draw_normal(self):
@@ -221,14 +222,9 @@ def toggle_debug():
     global debug_mode
     debug_mode = not debug_mode
 
-def toggle_theme():
-    global current_theme
-    current_theme = 1 if current_theme == 0 else 0
-
 def Reset():
-    global grid_value, grid_color
-    grid_value = np.zeros((grid_width, grid_height), dtype=np.uint8)
-    grid_color = np.zeros((grid_width, grid_height, 3), dtype=np.uint8)
+    grid_value.fill(0)
+    grid_color.fill(0)
 
 def set_brush(index):
     global current_brush
@@ -240,114 +236,83 @@ def set_selected_block(block_id):
 
 
 # --- Adding btns ---
-base_btn_all = []
+button_list = []
 btn_height = 30
 
-# actions buttons
-buttons_config = [
-    {
-        "default_label": "Pause",
-        "alt_label": "Play",
-        "action": pause_game,
-    },
-    {
-        "default_label": "Reset",
-        "action": Reset,
-    },
-    {
-        "default_label": "Debug",
-        "action": toggle_debug,
-    },
-]
-
-start_x = 0
+# action buttons 
 start_y = 30
 columns = 3
 cell_width = overlay_size // columns
 
-base_btn_all.append(
-    Button(
-        rect=pygame.Rect(start_x, start_y, cell_width, btn_height),
-        action=  lambda action = pause_game: action(),
-        label= "Pause",
-        toggled= False,
-        text_color=theme_text,
-        bg_color=theme_bg,
-    )
-)
+buttons = [
+    ("Pause", pause_game, False),
+    ("Debug", toggle_debug, False),
+    ("Reset", Reset, None),
+]
 
-start_x = cell_width
-base_btn_all.append(
-    Button(
-        rect=pygame.Rect(start_x, start_y, cell_width, btn_height),
-        action=  lambda action = Reset: action(),
-        label= "Reset",
-        toggled= None,
-        text_color=theme_text,
-        bg_color=theme_bg,
+for i, (label, action, toggled) in enumerate(buttons):
+    button_list.append(
+        Button(
+            rect=pygame.Rect(i * cell_width, start_y, cell_width, btn_height),
+            action=action,
+            label=label,
+            toggled=toggled,
+            text_color=theme_text,
+            bg_color=theme_bg,
+        )
     )
-)
 
-start_x = cell_width + cell_width
-base_btn_all.append(
-    Button(
-        rect=pygame.Rect(start_x, start_y, cell_width, btn_height),
-        action=  lambda action = toggle_debug: action(),
-        label= "Debug",
-        toggled= False,
-        text_color=theme_text,
-        bg_color=theme_bg,
-    )
-)
-
-# selected block buttons
-x = 0
+# block selection 
 start_y += btn_height * 2
 columns = 5
-cell_width = overlay_size / columns
-block_group = Radiogroup("block_group")
-for block_id in blocks.keys():
+cell_width = overlay_size // columns
+gap = 5
 
-    btn = CircleButton(
-        rect=pygame.Rect(x, start_y, cell_width, btn_height),
-        action= lambda b=block_id: set_selected_block(b),
-        label= blocks[block_id]["name"].capitalize(),
-        text_color= blocks[block_id]["color"],
-        bg_color= theme_bg,
-        toggled= (selected_block == block_id),
-        group= block_group
+block_group = Radiogroup("block_group")
+
+for i, block_id in enumerate(blocks):
+    x = (i % columns) * cell_width
+    y = start_y + (i // columns) * (btn_height + gap)
+
+    button_list.append(
+        CircleButton(
+            rect=pygame.Rect(x, y, cell_width, btn_height),
+            action=lambda b=block_id: set_selected_block(b),
+            label=blocks[block_id]["name"].capitalize(),
+            text_color=blocks[block_id]["color"],
+            bg_color=theme_bg,
+            toggled=(selected_block == block_id),
+            group=block_group
+        )
     )
 
-    base_btn_all.append(btn)
-
-    x += cell_width
-    if x >= overlay_size:
-        x = 0
-        start_y += btn_height + 5
-
-
-#  select brush buttons
-start_y += btn_height * 2
+# brush selection 
+start_y += btn_height * 3
 brush_group = Radiogroup("brush_group")
 
-x = 16
+x = 8
+gap = 8
 
-for radius in range(len(brushes)):
+for radius in range(len(brushes) -1,-1,-1):
     size = block_size * (radius + 1)
-    w = size * 2
+    w = size * 1.8
 
-    btn = CircleButton(
-        rect=pygame.Rect(x, start_y, w, btn_height),
-        action=lambda r=radius: set_brush(r),
-        value=size,
-        text_color=theme_text,
-        bg_color=theme_bg,
-        toggled=(current_brush == radius),
-        group=brush_group
+    if x + w > overlay_size:
+        break
+
+    button_list.append(
+        CircleButton(
+            rect=pygame.Rect(x, start_y, w, btn_height),
+            action=lambda r=radius: set_brush(r),
+            value=size,
+            text_color=theme_text,
+            bg_color=theme_bg,
+            toggled=(current_brush == radius),
+            group=brush_group
+        )
     )
 
-    base_btn_all.append(btn)
-    x += w + 16
+    x += w + gap
 
 
 # --- Small helpers ---
@@ -601,7 +566,7 @@ while run:
         grid_active_next.fill(False)
 
     # --- Button ---
-    for btn in base_btn_all:
+    for btn in button_list:
         btn.handle_draw()
         if mouse_clicked:
             btn.handle_event()
