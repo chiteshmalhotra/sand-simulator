@@ -10,6 +10,7 @@ screen_height = 600
 screen_width = 800
 screen = pygame.display.set_mode((screen_width, screen_height)) 
 
+# color theme
 theme_text   = (0, 0, 0)
 theme_muted   = (150,150,150)
 theme_fg  = (197, 197, 197)
@@ -17,10 +18,10 @@ theme_bg   = (255, 255, 255)
 theme_success = (166, 209, 137)
 theme_danger  = (226, 117, 117)
 
+# game variables
 run = True
 direction = True
 block_size = 5
-chunk_size = 10
 
 font = pygame.font.SysFont(None, 24)
 pygame.display.set_caption("Sand Simulator 3000")
@@ -28,6 +29,7 @@ pygame.display.set_caption("Sand Simulator 3000")
 overlay_h = 50
 overlay_rect = pygame.Rect(0, 0, screen_width, overlay_h)
 
+# --- grid ---
 grid_height = (screen_height - overlay_h) // block_size
 grid_width  = screen_width // block_size
 grid_rect = pygame.Rect( 0, overlay_h, screen_width, screen_height - overlay_h)
@@ -38,8 +40,12 @@ grid_color = np.zeros((grid_width, grid_height, 3), dtype=np.uint8)
 grid_active = np.zeros((grid_width, grid_height), dtype=bool)
 grid_active_next = np.zeros((grid_width, grid_height), dtype=bool)
 
-active_chunk = np.zeros((grid_width // chunk_size, grid_height // chunk_size), dtype=bool)
-active_chunk_next = np.zeros((grid_width // chunk_size, grid_height // chunk_size), dtype=bool)
+# divide grid into chunks for optimization
+chunk_size = 10
+chunks_width = grid_width // chunk_size
+chunks_height = grid_height // chunk_size
+chunk_active = np.zeros((chunks_width, chunks_height), dtype=bool)
+chunk_active_next = np.zeros((chunks_width, chunks_height), dtype=bool)
 
 neighbors_offset = [(-1, -1), (0, -1), (1, -1),(-1,  0), (1,  0), (-1,  1), (0,  1), (1,  1)]
 
@@ -53,7 +59,7 @@ mouse_y = 0
 selected_block = 1
 hovered_block = 0
 
-debug_mode = False
+debug_mode = True
 game_paused = False
 mouser_pressed = False
 hovering_button = False
@@ -338,75 +344,24 @@ def get_grid_cords():
 
 # --- Draw helpers ---
 
+def draw_chunks(color=theme_muted):
+    pixel_chunk = chunk_size * block_size
+
+    for cx in range(chunks_width):
+        for cy in range(chunks_height):
+            x = cx * pixel_chunk
+            y = overlay_h + cy * pixel_chunk
+
+            pygame.draw.rect(
+                screen,
+                theme_text if chunk_active[cx, cy] else color,
+                (x, y, pixel_chunk, pixel_chunk),
+                1
+            )
+
 def draw_text(text, x, y, color=theme_muted):
     text_surface = font.render(text, True, color)
     screen.blit(text_surface, (x, y))
-
-
-# --- chunking ---
-
-
-
-
-
-
-
-
-
-
-
-def activate_chunk(x,y):
-    chunk_x = int(x // chunk_size)
-    chunk_y = int(y // chunk_size)
-
-    if 0 <= chunk_x < active_chunk.shape[0] and 0 <= chunk_y < active_chunk.shape[1]:
-        active_chunk[chunk_x, chunk_y] = True
-
-def deactivate_chunk(x,y):
-    chunk_x = int(x // chunk_size)
-    chunk_y = int(y // chunk_size)
-
-    if 0 <= chunk_x < active_chunk.shape[0] and 0 <= chunk_y < active_chunk.shape[1]:
-        active_chunk[chunk_x, chunk_y] = False
-
-def is_chunk_active(x, y):
-    chunk_x = int(x // chunk_size)
-    chunk_y = int(y // chunk_size)
-    if 0 <= chunk_x < active_chunk.shape[0] and 0 <= chunk_y < active_chunk.shape[1]:
-        return active_chunk[chunk_x, chunk_y]
-    return False
-
-
-
-def draw_chunks(color=theme_muted):
-    for chunk_x in range(active_chunk.shape[0]):
-        for chunk_y in range(active_chunk.shape[1]):
-            x = chunk_x * chunk_size * block_size
-            y = overlay_h + chunk_y * chunk_size * block_size
-            if active_chunk[chunk_x, chunk_y]:
-                pygame.draw.rect(screen, theme_danger, pygame.Rect(x, y, chunk_size * block_size, chunk_size * block_size), 1)
-            else:
-                pygame.draw.rect(screen, theme_success, pygame.Rect(x, y, chunk_size * block_size, chunk_size * block_size), 1)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 # --- Simulation ---
 def mark_in_active_grid(x, y):
@@ -415,8 +370,6 @@ def mark_in_active_grid(x, y):
         if 0 <= mx < grid_width and 0 <= my < grid_height:
             if grid_value[mx,my]:
                 grid_active_next[mx, my] = True
-    
-                activate_chunk(x, y)
 
 def swap(x, y, x1, y1):  
     grid_value[x, y], grid_value[x1, y1] = \
@@ -492,8 +445,7 @@ def draw_block(x,y):
         grid_color[x, y] = get_close_color(grid_value[x, y])
     
     # draw
-    if debug_mode and grid_active[x, y]
-    :
+    if debug_mode and grid_active[x, y]:
         pygame.draw.rect(screen, grid_color[x, y], pygame.Rect(screen_x, screen_y, block_size, block_size),2)
     else:
         pygame.draw.rect(screen, grid_color[x, y], pygame.Rect(screen_x, screen_y, block_size, block_size))
@@ -569,14 +521,16 @@ def game():
         for x in x_order:
             if grid_value[x, y]:
                 # draw
-                if is_chunk_active(x,y):595
-                    draw_block(x, y)
+                draw_block(x, y)
 
                 # Simulation
                 if not game_paused:
                     simulation_block(x, y)
     
-    draw_chunks(color=theme_muted)
+    # debug_mode
+    if debug_mode:
+        draw_chunks(color=theme_muted)
+    #     pygame.draw.circle(screen, theme_muted, (mouse_x, mouse_y), block_size * (selected_brush + 1), 1)
     
 # --- Main loop ---
 while run:   
@@ -586,8 +540,6 @@ while run:
     direction = not direction  # not sure if you need to toggle every frame
     mouse_x, mouse_y = pygame.mouse.get_pos()
     grid_x, grid_y = get_grid_cords()
-
-    
     
     # --- Event handling ---
     for event in pygame.event.get():
@@ -620,9 +572,8 @@ while run:
     if not game_paused:
         grid_active[:] = grid_active_next
         grid_active_next.fill(False)
-
-        active_chunk[:] = active_chunk_next
-        active_chunk_next.fill(False)
+        chunk_active[:] = chunk_active_next
+        chunk_active_next.fill(False)
 
     # --- Buttons ---
     hovering_button = False
