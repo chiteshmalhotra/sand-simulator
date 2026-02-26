@@ -38,6 +38,8 @@ grid_color = np.zeros((grid_width, grid_height, 3), dtype=np.uint8)
 grid_active = np.zeros((grid_width, grid_height), dtype=bool)
 grid_active_next = np.zeros((grid_width, grid_height), dtype=bool)
 
+active_chunk = np.zeros((grid_width // chunk_size, grid_height // chunk_size), dtype=bool)
+
 neighbors_offset = [(-1, -1), (0, -1), (1, -1),(-1,  0), (1,  0), (-1,  1), (0,  1), (1,  1)]
 
 # --- user variable ---
@@ -77,7 +79,7 @@ blocks = {
 
 create_brush = lambda r : [(x,y) for x in range(-r, r+1) for y in range(-r, r+1) if x*x + y*y <= r*r]
 brushes = {'S': create_brush(2), 'M': create_brush(4), 'L': create_brush(6)}
-current_brush = 'M'
+selected_brush = 'S'
 
 # --- block_palette ---
 
@@ -204,17 +206,17 @@ class Button:
 class CircleButton(Button):
     def draw_normal(self):
         pygame.draw.circle(screen, self.color, self.rect.center, self.temp_circle)
-        pygame.draw.circle(screen, self.text_color, self.rect.center, self.temp_circle,1)
+        # pygame.draw.circle(screen, self.text_color, self.rect.center, self.temp_circle,1)
         self.draw_label(self.text_color)
 
     def draw_hover(self):
-        pygame.draw.circle(screen,self.color,self.rect.center, self.temp_circle + 2)
-        pygame.draw.circle(screen,self.text_color,self.rect.center, self.temp_circle + 3, 1)
+        pygame.draw.circle(screen,self.color,self.rect.center, self.temp_circle)
+        pygame.draw.circle(screen,self.text_color,self.rect.center, self.temp_circle , 1)
         self.draw_label(self.text_color)
 
     def draw_active(self):
-        pygame.draw.circle(screen,self.color,self.rect.center, self.temp_circle + 2)
-        pygame.draw.circle(screen,self.text_color,self.rect.center, self.temp_circle + 3, 2)
+        pygame.draw.circle(screen,self.color,self.rect.center, self.temp_circle)
+        pygame.draw.circle(screen,self.text_color,self.rect.center, self.temp_circle , 2)
         self.draw_label(self.text_color)
 
 # --- btns funstions ---
@@ -232,8 +234,8 @@ def Reset():
     grid_color.fill(0)
 
 def set_brush(index):
-    global current_brush
-    current_brush = index
+    global selected_brush
+    selected_brush = index
 
 def set_selected_block(block_id):
     global selected_block
@@ -242,12 +244,13 @@ def set_selected_block(block_id):
 # --- Adding btns ---
 button_list = []
 
-padding = 8
+padding = 4
 main_padding = 24
 
-x = padding
-y = padding
 h = 26
+x = padding
+y = overlay_h // 2 - h // 2
+
 
 # --- action buttons ---
 action_buttons = [
@@ -255,6 +258,7 @@ action_buttons = [
     ("Debug", toggle_debug, False, pygame.K_d, "Toggle debug mode (D)"),
     ("Reset", Reset, None, pygame.K_BACKSPACE, "Reset the game (Backspace)"),
 ]
+
 for label, action, toggled, shortcut, tooltip in action_buttons:
     w = font.size(label)[0] + 16
     button_list.append(
@@ -265,7 +269,7 @@ for label, action, toggled, shortcut, tooltip in action_buttons:
             toggled=toggled,
             color=theme_muted,
             shortcut=shortcut,
-            tooltip_text=tooltip,  # <-- added tooltip
+            tooltip_text=tooltip,
         )
     )
     x += w + 4
@@ -274,7 +278,6 @@ x += main_padding
 
 # --- block selection ---
 block_group = Radiogroup("block_group")
-
 for block_id, block in blocks.items():
     button_list.append(
         CircleButton(
@@ -285,10 +288,10 @@ for block_id, block in blocks.items():
             toggled=(selected_block == block_id),
             group=block_group,
             shortcut=pygame.K_0 + block_id,
-            tooltip_text=f"Select {block['name'].capitalize()} ({block_id})"  # <-- tooltip here
+            tooltip_text=f"Select {block['name'].capitalize()} ({block_id})" 
         )
     )
-    x += font.size(str(block_id))[0] + 12
+    x += h + padding
 
 x += main_padding
 
@@ -296,18 +299,20 @@ x += main_padding
 brush_group = Radiogroup("brush_group")
 
 for key in brushes:
+    shortcut = {"S": pygame.K_s, "M": pygame.K_m, "L": pygame.K_l}[key]
     button_list.append(
         CircleButton(
             rect=pygame.Rect(x, y, 16, h),
             action=lambda r=key: set_brush(r),
             label=str(key),
             color=theme_muted,
-            toggled=(current_brush == key),
+            toggled=(selected_brush == key),
             group=brush_group,
-            tooltip_text=f"Select brush size ({key.capitalize()})"  # <-- tooltip here
+            shortcut=shortcut,
+            tooltip_text=f"Select brush size ({key.capitalize()})"
         )
     )
-    x += font.size(str(key))[0] + 12
+    x += h + padding
 
 # --- Small helpers ---
 get_close_color = lambda block : random.choice(block_palette[block])
@@ -336,24 +341,44 @@ def draw_text(text, x, y, color=theme_muted):
     text_surface = font.render(text, True, color)
     screen.blit(text_surface, (x, y))
 
-def draw_chunks(color=theme_muted):
-    # vertical chunk lines
-    for x in range(0, screen_width + 1, chunk_size):
-        pygame.draw.line(
-            screen,
-            color,
-            (x, overlay_h),
-            (x, screen_height)
-        )
+def activate_chunk(x, y):
+    chunk_x = x // chunk_size
+    chunk_y = y // chunk_size
 
-    # horizontal chunk lines
-    for y in range(overlay_h, screen_height + 1, chunk_size):
-        pygame.draw.line(
-            screen,
-            color,
-            (0, y),
-            (screen_width, y)
-        )
+    print(f"Activating chunk: ({chunk_x}, {chunk_y})")
+    if 0 <= chunk_x < active_chunk.shape[0] and 0 <= chunk_y < active_chunk.shape[1]:
+        active_chunk[chunk_x, chunk_y] = True
+
+
+def draw_chunks(color=theme_muted):
+    for x in range(0, screen_width, chunk_size):
+        for y in range(overlay_h, screen_height, chunk_size):
+            chunk_x = x // chunk_size
+            chunk_y = (y - overlay_h) // chunk_size
+
+            # check bounds
+            if chunk_x < active_chunk.shape[0] and chunk_y < active_chunk.shape[1]:
+                if active_chunk[chunk_x, chunk_y]:
+                    pygame.draw.rect(screen, color, pygame.Rect(x, y, chunk_size, chunk_size), 1)
+    return
+    if debug_mode:
+        # vertical chunk lines
+        for x in range(0, screen_width + 1, chunk_size):
+            pygame.draw.line(
+                screen,
+                color,
+                (x, overlay_h),
+                (x, screen_height)
+            )
+
+        # horizontal chunk lines
+        for y in range(overlay_h, screen_height + 1, chunk_size):
+            pygame.draw.line(
+                screen,
+                color,
+                (0, y),
+                (screen_width, y)
+            )
 
 # --- Simulation ---
 def mark_in_active_grid(x, y):
@@ -362,6 +387,8 @@ def mark_in_active_grid(x, y):
         if 0 <= mx < grid_width and 0 <= my < grid_height:
             if grid_value[mx,my]:
                 grid_active_next[mx, my] = True
+    
+        activate_chunk(x, y)
 
 def swap(x, y, x1, y1):  
     grid_value[x, y], grid_value[x1, y1] = \
@@ -416,8 +443,8 @@ def place_block(x, y):
         mark_in_active_grid(grid_x,grid_y)
 
     # add neighbour
-    for dx, dy in brushes[current_brush]:
-        if random.randint(0, 1): continue
+    for dx, dy in brushes[selected_brush]:
+        if random.randint(0, 4) == 0:continue
         
         mx, my = x + dx, y + dy
         if 0 <= mx < grid_width and 0 <= my < grid_height:
@@ -498,6 +525,8 @@ def simulation_block(x, y):
 
 # right
 def game():
+    pygame.draw.rect(screen, theme_bg, grid_rect)
+
     # Placement logic
     if grid_rect.collidepoint(mouse_x, mouse_y) and mouser_pressed:
         if 0 <= grid_x < grid_width and 0 <= grid_y < grid_height:           
@@ -517,45 +546,45 @@ def game():
                 if not game_paused:
                     simulation_block(x, y)
     
-    # debug_mode
-    if debug_mode:
-        draw_chunks(color=theme_muted)
-    #     pygame.draw.circle(screen, theme_muted, (mouse_x, mouse_y), block_size * (current_brush + 1), 1)
+    draw_chunks(color=theme_muted)
     
 # --- Main loop ---
 while run:   
     # --- Variables ---
     tooltip_text = None
     mouse_clicked = False
-    direction = not direction
+    direction = not direction  # not sure if you need to toggle every frame
     mouse_x, mouse_y = pygame.mouse.get_pos()
     grid_x, grid_y = get_grid_cords()
     
     # --- Event handling ---
     for event in pygame.event.get():
+        # handle buttons
         for btn in button_list:
             btn.handle_event(event)
-
+        
         if event.type == pygame.QUIT:
             run = False
         elif event.type == pygame.MOUSEBUTTONDOWN:
             mouser_pressed = True
         elif event.type == pygame.MOUSEBUTTONUP:
-            mouser_pressed = False
-    
+            mouser_pressed = False 
+
     # --- Draw ---
-    screen.fill(theme_bg)
-    game()
-    
+    # screen.fill(theme_bg)
+    game() 
+
     # Overlay UI
     pygame.draw.rect(screen, theme_fg, overlay_rect)
     pygame.draw.line(screen, theme_text, (0, overlay_h), (screen_width, overlay_h))
+    
+    # FPS
     fps_text = f"FPS {int(mainclock.get_fps())}"
     screen.blit(
         font.render(fps_text, True, theme_text),
         (screen_width - font.size(fps_text)[0] - 8, (overlay_h - font.size(fps_text)[1]) // 2)
     )
-    
+
     # --- Update active blocks ---
     if not game_paused:
         grid_active[:] = grid_active_next
@@ -565,13 +594,18 @@ while run:
     hovering_button = False
     for btn in button_list:
         btn.handle_draw()
-        hovering_button = btn.handle_hover()
+        if btn.handle_hover():  # handle_hover should return True if hovered
+            hovering_button = True
+            if btn.tooltip_text:
+                tooltip_text = btn.tooltip_text  # set tooltip for hovered button
+
     pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND if hovering_button else pygame.SYSTEM_CURSOR_ARROW)
 
     # --- Tooltips ---
     if tooltip_text:
-        tooltip_rect = pygame.Rect(mouse_x + 16, mouse_y + 16, font.size(tooltip_text)[0] + 24, 24)
-        pygame.draw.rect(screen, theme_text, tooltip_rect,border_radius=6)
+        text_w, text_h = font.size(tooltip_text)
+        tooltip_rect = pygame.Rect(mouse_x + 16, mouse_y + 16, text_w + 24, text_h + 8)
+        pygame.draw.rect(screen, theme_text, tooltip_rect, border_radius=6)
         screen.blit(font.render(tooltip_text, True, theme_bg), tooltip_rect.topleft + pygame.Vector2(12, 4))
 
     # --- Update screen ---
