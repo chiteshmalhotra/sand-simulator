@@ -5,20 +5,16 @@ import random
 pygame.init()
 mainclock = pygame.time.Clock()
 
-# --- display variables ---
-screen_size= 600
-overlay_size = 200
+# --- variables ---
 
-screen_height = screen_size
-screen_width = screen_size + overlay_size
-
+screen_height = 600
+screen_width = 800
 screen = pygame.display.set_mode((screen_width, screen_height)) 
 
-# --- theme variables ---
 theme_text   = (0, 0, 0)
-theme_muted   = (197, 197, 197)
+theme_muted   = (150,150,150)
+theme_fg  = (197, 197, 197)
 theme_bg   = (255, 255, 255)
-
 theme_success = (166, 209, 137)
 theme_danger  = (226, 117, 117)
 
@@ -29,20 +25,30 @@ block_size = 5
 chunk_size = block_size * 10
 
 font = pygame.font.SysFont(None, 24)
+pygame.display.set_caption("Sand Simulator 3000")
 
-overlay_rect = pygame.Rect(0,0,overlay_size,screen_height)
+# overlay variables
+overlay_h = 40
+overlay_rect = pygame.Rect(0, 0, screen_width, overlay_h)
 
-grid_height = int(screen_height / block_size)
-grid_width = int((screen_width - overlay_size) / block_size)
-grid_rect = pygame.Rect(overlay_size,0,screen_width - overlay_size,screen_height)
+# grid variables
+grid_height = (screen_height - overlay_h) // block_size
+grid_width  = screen_width // block_size
+grid_rect = pygame.Rect( 0, overlay_h, screen_width, screen_height - overlay_h)
 
-grid_value  = np.zeros((grid_width, grid_height), dtype=np.uint8)
+# using numpy arrays for better performance
+grid_value = np.zeros((grid_width, grid_height), dtype=np.uint8)
 grid_color = np.zeros((grid_width, grid_height, 3), dtype=np.uint8)
 
 grid_active = np.zeros((grid_width, grid_height), dtype=bool)
 grid_active_next = np.zeros((grid_width, grid_height), dtype=bool)
 
-neighbors_offset = [(-1, -1), (0, -1), (1, -1), (-1,  0), (1,  0), (-1,  1), (0,  1), (1,  1)]
+
+neighbors_offset = [
+    (-1, -1), (0, -1), (1, -1),
+    (-1,  0),          (1,  0),
+    (-1,  1), (0,  1), (1,  1)
+]
 
 # --- user variable ---
 grid_x = 0 
@@ -56,9 +62,10 @@ hovered_block = 0
 
 debug_mode = False
 game_paused = False
-mouse_clicked = False
 mouser_pressed = False
 hovering_button = False
+
+tooltip_text = None
 
 # --- blocks ---
 
@@ -77,11 +84,13 @@ blocks = {
         "density": 0, "state": "gas", "ability": None}}
 
 # --- brush ---
+
 create_brush = lambda r : [(x,y) for x in range(-r, r+1) for y in range(-r, r+1) if x*x + y*y <= r*r]
-brushes = [create_brush(2),create_brush(4),create_brush(6),create_brush(8)]
-current_brush = 1
+brushes = {'S': create_brush(2), 'M': create_brush(4), 'L': create_brush(6)}
+current_brush = 'M'
 
 # --- block_palette ---
+
 def create_block_palette(delta=8, count=8):
     return {
         block: [
@@ -95,6 +104,7 @@ def create_block_palette(delta=8, count=8):
 block_palette = create_block_palette()
 
 # --- Classes ---
+
 class Radiogroup:
     def __init__(self, groupname):
         self.groupname = groupname
@@ -111,22 +121,22 @@ class Radiogroup:
         selected_radio.toggled = True
 
 class Button:
-    def __init__(self, rect, action=None, label='',
-                 text_color=(0,0,0), bg_color=(255,255,255), border_color=(150,150,150),
-                toggled=None, group=None,value = None):
+    def __init__(self, rect = None, circle = None, action=None, label='', color= (255,255,255),text_color = (0,0,0) , toggled=None, group=None, shortcut=None):
 
         self.rect = rect
-        self.label = label
+
         self.action = action
+        self.label = label
         
-        self.bg_color = bg_color
+        self.color = color 
         self.text_color = text_color
-        self.border_color = border_color
 
         self.toggled = toggled   
         self.group = group
 
-        self.value = value or self.rect.height//2
+        self.shortcut = shortcut
+
+        self.temp_circle = self.rect.height//2
 
         if self.group is not None:
             self.group.add(self)
@@ -135,44 +145,35 @@ class Button:
         self.clicked = False
         self.hovered = False
 
-    
     def handle_draw(self):
         state = self.get_state()
 
         if state == "active":
             self.draw_active()
-        elif state == "pressed":
-            self.draw_pressed()
         elif state == "hover":
             self.draw_hover()
         else:
             self.draw_normal()
 
     def get_state(self):
-        if self.toggled:
+        if self.toggled or self.clicked:
             return "active"
-        if self.clicked:
-            return "pressed"
         if self.hovered:
             return "hover"
         return "normal"
     
-
     def draw_normal(self):
-        pygame.draw.rect(screen, self.border_color, self.rect, 1,border_radius=5)
+        pygame.draw.rect(screen, self.color, self.rect,border_radius=50)
         self.draw_label(self.text_color)
 
     def draw_hover(self):
-        pygame.draw.rect(screen, self.border_color, self.rect, 3,border_radius=5)
+        pygame.draw.rect(screen, self.color, self.rect,border_radius=50)
+        pygame.draw.rect(screen, self.text_color, self.rect, 1,border_radius=50)
         self.draw_label(self.text_color)
 
     def draw_active(self):
-        pygame.draw.rect(screen, self.text_color, self.rect,border_radius=5)
-        self.draw_label(self.bg_color)
-
-    def draw_pressed(self):
-        pygame.draw.rect(screen, self.text_color, self.rect,border_radius=5)
-        self.draw_label(self.bg_color)
+        pygame.draw.rect(screen, self.text_color, self.rect,border_radius=50)
+        self.draw_label(self.color)
 
     def draw_label(self, color):
         label = self.font.render(self.label, True, color)
@@ -180,40 +181,49 @@ class Button:
 
     def handle_hover(self):
         self.hovered = self.rect.collidepoint((mouse_x, mouse_y))
-        return self.hovered
+        return self.hovered , self.label if self.hovered else None
 
-    def handle_event(self):
-        if not self.rect.collidepoint(mouse_x, mouse_y):
-            return
+    def handle_event(self, event):
+        # mouse click
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if self.rect.collidepoint(mouse_x, mouse_y):
+                self.activate()
 
+        # keyboard shortcut
+        elif event.type == pygame.KEYDOWN:
+            if self.shortcut and event.key == self.shortcut:
+                self.activate()
+    
+    def activate(self):
         # group controls toggling
         if self.group:
             self.group.select(self)
 
-        # standalone toggle button
+        # standalone toggle
         elif self.toggled is not None:
             self.toggled = not self.toggled
 
-        # default
         if self.action:
             self.action()
 
-
 class CircleButton(Button):
     def draw_normal(self):
-        pygame.draw.circle(screen, self.text_color, self.rect.center, self.value)
-        pygame.draw.circle(screen, self.border_color, self.rect.center, self.value,1)
+        pygame.draw.circle(screen, self.color, self.rect.center, self.temp_circle)
+        pygame.draw.circle(screen, self.text_color, self.rect.center, self.temp_circle,1)
+        self.draw_label(self.text_color)
 
     def draw_hover(self):
-        pygame.draw.circle(screen,self.text_color,self.rect.center, self.value - 1)
-        pygame.draw.circle(screen,self.border_color,self.rect.center, self.value + 2, 1)
+        pygame.draw.circle(screen,self.color,self.rect.center, self.temp_circle + 2)
+        pygame.draw.circle(screen,self.text_color,self.rect.center, self.temp_circle + 3, 1)
+        self.draw_label(self.text_color)
 
     def draw_active(self):
-        pygame.draw.circle(screen,self.text_color,self.rect.center, self.value - 1)
-        pygame.draw.circle(screen,(0,0,0),self.rect.center, self.value + 2, 1)
-
+        pygame.draw.circle(screen,self.color,self.rect.center, self.temp_circle + 2)
+        pygame.draw.circle(screen,self.text_color,self.rect.center, self.temp_circle + 3, 2)
+        self.draw_label(self.text_color)
 
 # --- btns funstions ---
+
 def pause_game():
     global game_paused
     game_paused = not game_paused
@@ -234,86 +244,67 @@ def set_selected_block(block_id):
     global selected_block
     selected_block = block_id
 
-
 # --- Adding btns ---
 button_list = []
-btn_height = 30
 
-# action buttons 
-start_y = 30
-columns = 3
-cell_width = overlay_size // columns
+padding = 8
+main_padding = 24
 
-buttons = [
-    ("Pause", pause_game, False),
-    ("Debug", toggle_debug, False),
-    ("Reset", Reset, None),
-]
+x = padding
+y = padding
+h = 26
 
-for i, (label, action, toggled) in enumerate(buttons):
+# --- action buttons ---
+for label, action, toggled, shortcut in [("Pause", pause_game, False,pygame.K_SPACE),("Debug", toggle_debug, False, pygame.K_d),("Reset", Reset, None, pygame.K_BACKSPACE)]:
+    w = font.size(label)[0] + 16
     button_list.append(
         Button(
-            rect=pygame.Rect(i * cell_width, start_y, cell_width, btn_height),
+            rect=pygame.Rect(x, y, w, h),
             action=action,
             label=label,
             toggled=toggled,
-            text_color=theme_text,
-            bg_color=theme_bg,
+            color=theme_muted,
+            shortcut=shortcut,
         )
     )
+    x += w + 4
 
-# block selection 
-start_y += btn_height * 2
-columns = 5
-cell_width = overlay_size // columns
-gap = 5
+x += main_padding
 
+# --- block selection ---
 block_group = Radiogroup("block_group")
 
-for i, block_id in enumerate(blocks):
-    x = (i % columns) * cell_width
-    y = start_y + (i // columns) * (btn_height + gap)
-
+for block_id, block in blocks.items():
     button_list.append(
         CircleButton(
-            rect=pygame.Rect(x, y, cell_width, btn_height),
+            rect=pygame.Rect(x, y, 16, h),
             action=lambda b=block_id: set_selected_block(b),
-            label=blocks[block_id]["name"].capitalize(),
-            text_color=blocks[block_id]["color"],
-            bg_color=theme_bg,
+            label=str(block_id),
+            color=block["color"],
             toggled=(selected_block == block_id),
-            group=block_group
+            group=block_group,
+            shortcut=pygame.K_0 + block_id,
         )
     )
+    x += font.size(str(block_id))[0] + 12
 
-# brush selection 
-start_y += btn_height * 3
+x += main_padding
+
+# --- brush selection ---
 brush_group = Radiogroup("brush_group")
 
-x = 8
-gap = 8
-
-for radius in range(len(brushes) -1,-1,-1):
-    size = block_size * (radius + 1)
-    w = size * 1.8
-
-    if x + w > overlay_size:
-        break
-
+for key in brushes:
     button_list.append(
         CircleButton(
-            rect=pygame.Rect(x, start_y, w, btn_height),
-            action=lambda r=radius: set_brush(r),
-            value=size,
-            text_color=theme_text,
-            bg_color=theme_bg,
-            toggled=(current_brush == radius),
-            group=brush_group
+            rect=pygame.Rect(x, y, 16, h),
+            action=lambda r=key: set_brush(r),
+            label=str(key),
+            color=theme_muted,
+            toggled=(current_brush == key),
+            group=brush_group,
         )
     )
-
-    x += w + gap
-
+    x += font.size(str(key))[0] + 12
 
 # --- Small helpers ---
 get_close_color = lambda block : random.choice(block_palette[block])
@@ -322,16 +313,18 @@ calculate_padding = lambda lines ,font_size=16 : (font_size + font_size/3) * lin
 
 def get_grid_cords():
     global grid_x, grid_y
-    
-    adjusted_x = mouse_x - overlay_size
-    
-    temp_grid_x = int(adjusted_x / block_size)
-    temp_grid_y = int(mouse_y / block_size)
 
-    if 0 <= temp_grid_x < grid_width and  0 <= temp_grid_y < grid_height:
+    # ignore overlay area
+    if mouse_y < overlay_h:
+        return grid_x, grid_y
+
+    temp_grid_x = mouse_x // block_size
+    temp_grid_y = (mouse_y - overlay_h) // block_size
+
+    if 0 <= temp_grid_x < grid_width and 0 <= temp_grid_y < grid_height:
         grid_x = temp_grid_x
         grid_y = temp_grid_y
-    
+
     return grid_x, grid_y
 
 # --- Draw helpers ---
@@ -340,12 +333,24 @@ def draw_text(text, x, y, color=theme_muted):
     text_surface = font.render(text, True, color)
     screen.blit(text_surface, (x, y))
 
-def draw_chunks(color = theme_muted):
-    for x in range(grid_rect.left, screen_width + 1, chunk_size):
-        pygame.draw.line(screen, color, (x, 0), (x, screen_height))
-        
-    for y in range(0, screen_height + 1, chunk_size):
-        pygame.draw.line(screen, color, (grid_rect.left, y), (screen_width, y))
+def draw_chunks(color=theme_muted):
+    # vertical chunk lines
+    for x in range(0, screen_width + 1, chunk_size):
+        pygame.draw.line(
+            screen,
+            color,
+            (x, overlay_h),
+            (x, screen_height)
+        )
+
+    # horizontal chunk lines
+    for y in range(overlay_h, screen_height + 1, chunk_size):
+        pygame.draw.line(
+            screen,
+            color,
+            (0, y),
+            (screen_width, y)
+        )
 
 # --- Simulation ---
 def mark_in_active_grid(x, y):
@@ -421,19 +426,16 @@ def place_block(x, y):
 
 # direct draw helper of game
 def draw_block(x,y):
-    screen_y = block_size * y
-    screen_x = overlay_size + block_size * x 
+    screen_y = overlay_h + block_size * y
+    screen_x = block_size * x 
 
     # block
     if not grid_color[x, y].all():
         grid_color[x, y] = get_close_color(grid_value[x, y])
     
-    # block
-    
-
     # draw
     if debug_mode and grid_active[x, y]:
-        pygame.draw.rect(screen, grid_color[x, y], pygame.Rect(screen_x, screen_y, block_size, block_size),1)
+        pygame.draw.rect(screen, grid_color[x, y], pygame.Rect(screen_x, screen_y, block_size, block_size),2)
     else:
         pygame.draw.rect(screen, grid_color[x, y], pygame.Rect(screen_x, screen_y, block_size, block_size))
 
@@ -493,8 +495,6 @@ def simulation_block(x, y):
 
 # right
 def game():
-    pygame.draw.rect(screen, theme_bg, grid_rect)
-
     # Placement logic
     if grid_rect.collidepoint(mouse_x, mouse_y) and mouser_pressed:
         if 0 <= grid_x < grid_width and 0 <= grid_y < grid_height:           
@@ -517,77 +517,74 @@ def game():
     # debug_mode
     if debug_mode:
         draw_chunks(color=theme_muted)
-        pygame.draw.circle(screen, theme_muted, (mouse_x, mouse_y), block_size * (current_brush + 1), 1)
+    #     pygame.draw.circle(screen, theme_muted, (mouse_x, mouse_y), block_size * (current_brush + 1), 1)
     
-# left 
-def overlay():
-    pygame.draw.rect(screen, theme_bg, overlay_rect)
-
-    pygame.draw.line(screen, theme_muted, [overlay_size, 0], [overlay_size, screen_height],3)
-    
-    draw_text(f'FPS {int(mainclock.get_fps())}', 8, screen_height - 72)   
-    draw_text(f"X {mouse_x:03d} Y {mouse_y:03d}", 8, screen_height - 48)
-    draw_text(f"Cells {np.count_nonzero(grid_active):05d} / {np.count_nonzero(grid_value):05d}", 8, screen_height - 24) 
-
-
-
-# main loop
-pygame.display.set_caption("Sand Simulator - by Chitesh Malhotra")
-# pygame.draw.rect(screen, theme_bg, screen.get_rect())
+# --- Main loop ---
 while run:   
-    # --- event loop ---
+    # --- Event handling ---
     for event in pygame.event.get():
+        for btn in button_list:
+            btn.handle_event(event)
+
         if event.type == pygame.QUIT:
             run = False
-
         elif event.type == pygame.MOUSEBUTTONDOWN:
-            mouse_clicked = True
             mouser_pressed = True
-
         elif event.type == pygame.MOUSEBUTTONUP:
             mouser_pressed = False
-
-        elif event.type == pygame.KEYDOWN:
-
-            key_num = event.key - pygame.K_0
-            if key_num in blocks:
-                selected_block = key_num
-
-            if event.key in [pygame.K_SPACE,pygame.K_RETURN]:
-                game_paused = not game_paused
     
-    # --- Main partation ---
+    # --- Draw ---
+    screen.fill(theme_bg)
     game()
-    overlay()
-
-    # --- active blocks update ---
+    
+    # Overlay UI
+    pygame.draw.rect(screen, theme_fg, overlay_rect)
+    pygame.draw.line(screen, theme_text, (0, overlay_h), (screen_width, overlay_h))
+    fps_text = f"FPS {int(mainclock.get_fps())}"
+    screen.blit(
+        font.render(fps_text, True, theme_text),
+        (screen_width - font.size(fps_text)[0] - 8, (overlay_h - font.size(fps_text)[1]) // 2)
+    )
+    
+    # --- Update active blocks ---
     if not game_paused:
         grid_active[:] = grid_active_next
         grid_active_next.fill(False)
 
-    # --- Button ---
+    # --- Buttons ---
+    hovering_button = False
     for btn in button_list:
         btn.handle_draw()
-        if mouse_clicked:
-            btn.handle_event()
-
-        if btn.handle_hover():
-            hovering_button = True
-        
-    # --- other tasks ---
-    cursor = pygame.SYSTEM_CURSOR_HAND if hovering_button else pygame.SYSTEM_CURSOR_ARROW
-    pygame.mouse.set_cursor(cursor)
+        hovered, tooltip_text = btn.handle_hover()
+    pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND if hovering_button else pygame.SYSTEM_CURSOR_ARROW)
 
     # --- Variables ---
     mouse_clicked = False
-    hovering_button = False
     direction = not direction
     mouse_x, mouse_y = pygame.mouse.get_pos()
     grid_x, grid_y = get_grid_cords()
 
-    # --- update screen ---
+    # --- Tooltips ---
+    if tooltip_text:
+        tooltip_rect = pygame.Rect(mouse_x + 16, mouse_y + 16, font.size(tooltip_text)[0] + 24, 24)
+        pygame.draw.rect(screen, theme_text, tooltip_rect,border_radius=6)
+        screen.blit(font.render(tooltip_text, True, theme_bg), tooltip_rect.topleft + pygame.Vector2(12, 4))
+
+    # --- Update screen ---
     pygame.display.update()
     mainclock.tick(60)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # Simple screenshake manager (Pygame)
