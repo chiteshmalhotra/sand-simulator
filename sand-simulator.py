@@ -243,12 +243,12 @@ class CircleButton(Button):
 def pause_game():
     global game_paused
     game_paused = not game_paused
+    chunk_active.fill(True)
 
 def toggle_debug():
     global debug_mode
     debug_mode = not debug_mode
-    # chunk_active.fill(True)
-    # screen.fill(theme_bg)
+    chunk_active.fill(True)
 
 def Reset():
     grid_value.fill(0)
@@ -267,15 +267,12 @@ def set_selected_block(block_id):
 
 button_list = []
 
-padding = 4
-main_padding = 24
-
-h = 26
-x = padding
+h = 24
+x = 4
 y = overlay_h // 2 - h // 2
+section_padding = 30
 
-
-#  mian btns
+#  main btns
 action_buttons = [
     ("Pause", pause_game, False, pygame.K_SPACE, "Pause the game (Space)"),
     ("Debug", toggle_debug, False, pygame.K_d, "Toggle debug mode (D)"),
@@ -297,7 +294,7 @@ for label, action, toggled, shortcut, tooltip in action_buttons:
     )
     x += w + 4
 
-x += main_padding
+x += section_padding
 
 # block selector btns
 block_group = Radiogroup("block_group")
@@ -314,9 +311,9 @@ for block_id, block in blocks.items():
             tooltip_text=f"Select {block['name'].capitalize()} ({block_id})" 
         )
     )
-    x += h - 6
+    x += h - 4
 
-x += main_padding
+x += section_padding
 
 # brush selector btns
 brush_group = Radiogroup("brush_group")
@@ -335,7 +332,7 @@ for key in brushes:
             tooltip_text=f"Select brush size ({key.capitalize()})"
         )
     )
-    x += h - 6
+    x += h - 4
 
 # --- Functions ---
 
@@ -363,40 +360,35 @@ def activate_neighbors(x, y, neighbours_offset = immediate_neighbour):
             if grid_value[mx, my]:
                 grid_active_next[mx, my] = True
 
-        # activate neighbour Chunks 
-        chunk_x = x // chunk_size + dx
-        chunk_y = y // chunk_size + dy
+        # activate neighbour Chunks
+        chunk_x, chunk_y = x // chunk_size + dx, y // chunk_size + dy
         if 0 <= chunk_x < chunk_w and 0 <= chunk_y < chunk_h:
             chunk_active_next[chunk_x, chunk_y] = True
 
 
 def place_block(x, y):
-    # place if empty or holding void
+    # place center
     if not grid_value[grid_x, grid_y] or not selected_block:
         grid_value[grid_x, grid_y] = selected_block
         grid_color[grid_x, grid_y] = get_close_color(selected_block)
-        activate_neighbors(grid_x,grid_y)
 
-    # add neighbour
+    # place brush
     for dx, dy in brushes[selected_brush]:
-        if random.randint(0, 2) == 0: continue
+        if random.random() < 0.2: continue
         
         mx, my = x + dx, y + dy
         if 0 <= mx < grid_w and 0 <= my < grid_h:
-            activate_neighbors(mx,my)
-            neighbors_color = get_close_color(selected_block)
             if not grid_value[mx, my] or not selected_block:
                 grid_value[mx, my] = selected_block
-                grid_color[mx, my] = neighbors_color
+                grid_color[mx, my] = get_close_color(selected_block)
+                activate_neighbors(mx,my)
 
 
 def draw_block(x, y):
-    value = grid_value[x, y]
-    if not value: return
-
-    rect = pygame.Rect(x * block_size , overlay_h + y * block_size, block_size, block_size)
-    width = 1 if debug_mode and grid_active[x, y] else 0
-    pygame.draw.rect(screen, grid_color[x, y], rect, width)
+    if grid_value[x, y]:
+        rect = pygame.Rect(x * block_size , overlay_h + y * block_size, block_size, block_size)
+        width = 1 if debug_mode and grid_active[x, y] else 0
+        pygame.draw.rect(screen, grid_color[x, y], rect, width)        
 
     
 def move_swap(x, y, x1, y1):  
@@ -425,13 +417,15 @@ def move(x, y, dx=0, dy=0):
     target_val = grid_value[mx, my]
     current_val = grid_value[x, y]
 
-    # move if empty
-    if target_val == 0:
+    # if empty
+    if not target_val:
         move_swap(x, y, mx, my)
         return True
 
-    current_denser = blocks[current_val]['density'] > blocks[target_val]['density']
-    if current_denser:
+    # if not empty
+    target_density = blocks[target_val]['density']
+    current_denser = blocks[current_val]['density']
+    if current_denser > target_density:
         # destroy if capable
         if blocks[current_val]['ability'] == 'destroy':
             move_destroy(x, y, mx, my)
@@ -467,32 +461,32 @@ def simulation():
             y_start = gy * chunk_size
             y_end   = (gy + 1) * chunk_size
 
-            # Skip inactive chunks
             chunk_rect = pygame.Rect(x_start * block_size, overlay_h + y_start * block_size, chunk_size * block_size, chunk_size * block_size)
-           
+
+            # Skip inactive chunks           
             if not chunk_active[gx, gy]:
                 if debug_mode:
                     pygame.draw.rect(screen, theme_fg, chunk_rect,1)
                 continue
-            else:
-                pygame.draw.rect(screen, theme_bg, chunk_rect)
-                if debug_mode:
-                    pygame.draw.rect(screen, theme_danger, chunk_rect,1)
+
+            pygame.draw.rect(screen, theme_bg, chunk_rect)
+            if debug_mode:
+                pygame.draw.rect(screen, theme_danger, chunk_rect,1)
 
             # Bottom to Top
             for y in range(y_end - 1, y_start - 1, -1):
 
-                x_order = list(range(x_start, x_end))
-                random.shuffle(x_order)
+                # Randomize horizontal scan to prevent bias
+                x_range = list(range(x_start, x_end))
+                if random.random() < 0.5: x_range.reverse()
 
-                for x in x_order:
+                for x in x_range:
                     if grid_value[x, y]:
                         if chunk_active[gx, gy]:
                             draw_block(x, y)
 
                         if not game_paused:
                             simulate_block(x, y)
-
 
 # --- Main loop ---
 screen.fill(theme_bg)
@@ -539,7 +533,7 @@ while run:
         text_surface = font.render(debug_text, True, theme_text)
         screen.blit(text_surface, (screen_width - text_surface.get_width() - 10 , (overlay_h - text_surface.get_height()) // 2))
 
-    # --- Update active blocks and chunks for next ---
+    # --- Update active blocks & chunks for next frame ---
     if not game_paused:
         grid_active[:] = grid_active_next
         grid_active_next.fill(False)
