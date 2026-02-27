@@ -35,10 +35,10 @@ grid_active = np.zeros((grid_w, grid_h), dtype=bool)
 grid_active_next = np.zeros((grid_w, grid_h), dtype=bool)
 
 # chunk 
-chunks_width = grid_w // chunk_size
-chunks_height = grid_h // chunk_size
-chunk_active = np.zeros((chunks_width, chunks_height), dtype=bool)
-chunk_active_next = np.zeros((chunks_width, chunks_height), dtype=bool)
+chunk_w = grid_w // chunk_size
+chunk_h = grid_h // chunk_size
+chunk_active = np.zeros((chunk_w, chunk_h), dtype=bool)
+chunk_active_next = np.zeros((chunk_w, chunk_h), dtype=bool)
 
 # --- Color variables ---
 
@@ -364,7 +364,7 @@ def activate_neighbors(x, y, neighbours_offset = immediate_neighbour):
         # activate neighbour Chunks 
         chunk_x = (x + dx) // chunk_size
         chunk_y = (y + dy) // chunk_size
-        if 0 <= chunk_x < chunks_width and 0 <= chunk_y < chunks_height:
+        if 0 <= chunk_x < chunk_w and 0 <= chunk_y < chunk_h:
             chunk_active_next[chunk_x, chunk_y] = True
 
 
@@ -499,9 +499,9 @@ def simulation_block(x, y):
 
 
 def simulation():
-    for gy in range(chunks_height - 1, -1, -1):
-        for gx in range(chunks_width):
-
+    for gy in range(chunk_h - 1, -1, -1):
+        for gx in range(chunk_w):
+            
             # Skip inactive chunks
             if not chunk_active[gx, gy]:
                 continue
@@ -512,6 +512,7 @@ def simulation():
             y_start = gy * chunk_size
             y_end   = (gy + 1) * chunk_size
 
+            # clear bg of active chunk
             chunk_rect = pygame.Rect(x_start * block_size, overlay_h + y_start * block_size, chunk_size * block_size, chunk_size * block_size)
             pygame.draw.rect(screen, theme_bg, chunk_rect)
 
@@ -537,7 +538,7 @@ while run:
     tooltip_text = None
     mouse_clicked = False
     direction = not direction
-    
+    fps = int(mainclock.get_fps())
     
     # --- Event handling ---
     for event in pygame.event.get():
@@ -569,9 +570,8 @@ while run:
     pygame.draw.rect(screen, theme_fg, overlay_rect)
     pygame.draw.line(screen, theme_text, (0, overlay_h), (screen_width, overlay_h))
 
-    fps_text = f"FPS {int(mainclock.get_fps())}"
     screen.blit(
-        font.render(fps_text, True, theme_text),
+        font.render(f"FPS {fps}", True, theme_text),
         fps_display_cord)
 
     # --- Update active blocks and chunks for next ---
