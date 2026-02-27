@@ -2,15 +2,46 @@ import pygame as pygame
 import numpy as np
 import random
 
+# --- Initilize pygame ---
+
 pygame.init()
 mainclock = pygame.time.Clock()
+pygame.display.set_caption("Sand Simulator 3000")
 
-# --- variables ---
+# --- Screen variables ---
+
 screen_height = 600
 screen_width = 800
 screen = pygame.display.set_mode((screen_width, screen_height)) 
 
-# color theme
+# --- Logic variables ---
+
+block_size = 5
+chunk_size = 10
+
+# overlay
+overlay_h = 50
+overlay_rect = pygame.Rect(0, 0, screen_width, overlay_h)
+
+# grid
+grid_h = (screen_height - overlay_h) // block_size
+grid_w  = screen_width // block_size
+grid_rect = pygame.Rect( 0, overlay_h, screen_width, screen_height - overlay_h)
+
+grid_value = np.zeros((grid_w, grid_h), dtype=np.uint8)
+grid_color = np.zeros((grid_w, grid_h, 3), dtype=np.uint8)
+
+grid_active = np.zeros((grid_w, grid_h), dtype=bool)
+grid_active_next = np.zeros((grid_w, grid_h), dtype=bool)
+
+# chunk 
+chunks_width = grid_w // chunk_size
+chunks_height = grid_h // chunk_size
+chunk_active = np.zeros((chunks_width, chunks_height), dtype=bool)
+chunk_active_next = np.zeros((chunks_width, chunks_height), dtype=bool)
+
+# --- Color variables ---
+
 theme_text   = (0, 0, 0)
 theme_muted   = (150,150,150)
 theme_fg  = (197, 197, 197)
@@ -18,55 +49,32 @@ theme_bg   = (255, 255, 255)
 theme_success = (166, 209, 137)
 theme_danger  = (226, 117, 117)
 
-# game variables
+# --- Game variables ---
+
 run = True
 direction = True
-block_size = 5
-
 font = pygame.font.SysFont(None, 24)
-pygame.display.set_caption("Sand Simulator 3000")
-
-overlay_h = 50
-overlay_rect = pygame.Rect(0, 0, screen_width, overlay_h)
-
-# --- grid ---
-grid_height = (screen_height - overlay_h) // block_size
-grid_width  = screen_width // block_size
-grid_rect = pygame.Rect( 0, overlay_h, screen_width, screen_height - overlay_h)
-
-grid_value = np.zeros((grid_width, grid_height), dtype=np.uint8)
-grid_color = np.zeros((grid_width, grid_height, 3), dtype=np.uint8)
-
-grid_active = np.zeros((grid_width, grid_height), dtype=bool)
-grid_active_next = np.zeros((grid_width, grid_height), dtype=bool)
-
-# divide grid into chunks for optimization
-chunk_size = 10
-chunks_width = grid_width // chunk_size
-chunks_height = grid_height // chunk_size
-chunk_active = np.zeros((chunks_width, chunks_height), dtype=bool)
-chunk_active_next = np.zeros((chunks_width, chunks_height), dtype=bool)
-
-neighbors_offset = [(-1, -1), (0, -1), (1, -1),(-1,  0), (1,  0), (-1,  1), (0,  1), (1,  1)]
+immediate_neighbour = [(-1, -1), (0, -1), (1, -1),(-1,  0),(0,0), (1,  0), (-1,  1), (0,  1), (1,  1)]
+fps_display_cord = (screen_width - 62, (overlay_h - 16) // 2)
 
 # --- user variable ---
-grid_x = 0 
-grid_y = 0
 
 mouse_x = 0
 mouse_y = 0
 
-selected_block = 1
-hovered_block = 0
+grid_x = 0 
+grid_y = 0
 
-debug_mode = True
+selected_block = 1
+
+debug_mode = False
 game_paused = False
 mouser_pressed = False
 hovering_button = False
 
 tooltip_text = None
 
-# --- blocks ---
+# --- Block data ---
 
 blocks = {
     0: { "name": "Void",  "color": (255, 255, 255), 
@@ -82,13 +90,13 @@ blocks = {
     5: { "name": "steam", "color": (220, 220, 220), 
         "density": 0, "state": "gas", "ability": None}}
 
-# --- brush ---
+# --- Initilize Brush ---
 
 create_brush = lambda r : [(x,y) for x in range(-r, r+1) for y in range(-r, r+1) if x*x + y*y <= r*r]
 brushes = {'S': create_brush(2), 'M': create_brush(4), 'L': create_brush(6)}
 selected_brush = 'S'
 
-# --- block_palette ---
+# --- Block palette ---
 
 def create_block_palette(delta=8, count=8):
     return {
@@ -226,7 +234,7 @@ class CircleButton(Button):
         pygame.draw.circle(screen,self.text_color,self.rect.center, self.temp_circle , 2)
         self.draw_label(self.text_color)
 
-# --- btns funstions ---
+# --- Btn actions ---
 
 def pause_game():
     global game_paused
@@ -239,6 +247,7 @@ def toggle_debug():
 def Reset():
     grid_value.fill(0)
     grid_color.fill(0)
+    screen.fill(theme_bg)
 
 def set_brush(index):
     global selected_brush
@@ -249,6 +258,7 @@ def set_selected_block(block_id):
     selected_block = block_id
 
 # --- Adding btns ---
+
 button_list = []
 
 padding = 4
@@ -259,7 +269,7 @@ x = padding
 y = overlay_h // 2 - h // 2
 
 
-# --- action buttons ---
+#  mian btns
 action_buttons = [
     ("Pause", pause_game, False, pygame.K_SPACE, "Pause the game (Space)"),
     ("Debug", toggle_debug, False, pygame.K_d, "Toggle debug mode (D)"),
@@ -283,7 +293,7 @@ for label, action, toggled, shortcut, tooltip in action_buttons:
 
 x += main_padding
 
-# --- block selection ---
+# block selector btns
 block_group = Radiogroup("block_group")
 for block_id, block in blocks.items():
     button_list.append(
@@ -302,7 +312,7 @@ for block_id, block in blocks.items():
 
 x += main_padding
 
-# --- brush selection ---
+# brush selectot btns
 brush_group = Radiogroup("brush_group")
 
 for key in brushes:
@@ -322,133 +332,114 @@ for key in brushes:
     x += h + padding
 
 # --- Small helpers ---
+
 get_close_color = lambda block : random.choice(block_palette[block])
 
-calculate_padding = lambda lines ,font_size=16 : (font_size + font_size/3) * lines
-
-def get_grid_cords():
+def update_grid_cords(x = mouse_x, y = mouse_y):
     global grid_x, grid_y
 
-    # ignore overlay area
-    if mouse_y < overlay_h:
+    if y < overlay_h:
         return grid_x, grid_y
 
-    temp_grid_x = mouse_x // block_size
-    temp_grid_y = (mouse_y - overlay_h) // block_size
+    temp_grid_x = x // block_size
+    temp_grid_y = (y - overlay_h) // block_size
 
-    if 0 <= temp_grid_x < grid_width and 0 <= temp_grid_y < grid_height:
-        grid_x = temp_grid_x
-        grid_y = temp_grid_y
-
-    return grid_x, grid_y
-
-# --- Draw helpers ---
-
-def draw_chunks(color=theme_muted):
-    pixel_chunk = chunk_size * block_size
-
-    for cx in range(chunks_width):
-        for cy in range(chunks_height):
-            x = cx * pixel_chunk
-            y = overlay_h + cy * pixel_chunk
-
-            pygame.draw.rect(
-                screen,
-                theme_text if chunk_active[cx, cy] else color,
-                (x, y, pixel_chunk, pixel_chunk),
-                1
-            )
+    if 0 <= temp_grid_x < grid_w and 0 <= temp_grid_y < grid_h:
+        grid_x, grid_y = temp_grid_x, temp_grid_y
 
 def draw_text(text, x, y, color=theme_muted):
     text_surface = font.render(text, True, color)
     screen.blit(text_surface, (x, y))
 
 # --- Simulation ---
-def mark_in_active_grid(x, y):
-    for dx, dy in neighbors_offset:
+
+def activate_neighbors(x, y, neighbours_offset = immediate_neighbour):
+    for dx, dy in neighbours_offset:
+        # activate neighbour blocks 
         mx, my = x + dx, y + dy
-        if 0 <= mx < grid_width and 0 <= my < grid_height:
-            if grid_value[mx,my]:
+        if 0 <= mx < grid_w and 0 <= my < grid_h:
+            if grid_value[mx, my]:
                 grid_active_next[mx, my] = True
 
-def swap(x, y, x1, y1):  
-    grid_value[x, y], grid_value[x1, y1] = \
-    grid_value[x1, y1], grid_value[x, y]
+        # activate neighbour Chunks 
+        chunk_x = (x + dx) // chunk_size
+        chunk_y = (y + dy) // chunk_size
+        if 0 <= chunk_x < chunks_width and 0 <= chunk_y < chunks_height:
+            chunk_active_next[chunk_x, chunk_y] = True
 
-    grid_color[x, y], grid_color[x1, y1] = \
-    grid_color[x1, y1].copy(), grid_color[x, y].copy()
 
-    mark_in_active_grid(x, y)
-    mark_in_active_grid(x1, y1)
+def place_block(x, y):
+    # place if empty or holding void
+    if not grid_value[grid_x, grid_y] or not selected_block:
+        grid_value[grid_x, grid_y] = selected_block
+        grid_color[grid_x, grid_y] = get_close_color(selected_block)
+        activate_neighbors(grid_x,grid_y)
 
-def destroy(x, y, x1, y1):
+    # add neighbour
+    for dx, dy in brushes[selected_brush]:
+        if random.randint(0, 2) == 0: continue
+        
+        mx, my = x + dx, y + dy
+        if 0 <= mx < grid_w and 0 <= my < grid_h:
+            activate_neighbors(mx,my)
+            neighbors_color = get_close_color(selected_block)
+            if not grid_value[mx, my] or not selected_block:
+                grid_value[mx, my] = selected_block
+                grid_color[mx, my] = neighbors_color
+
+
+def move_swap(x, y, x1, y1):  
+    grid_value[x, y], grid_value[x1, y1] = grid_value[x1, y1], grid_value[x, y]
+    grid_color[x, y], grid_color[x1, y1] = grid_color[x1, y1].copy(), grid_color[x, y].copy()
+
+    activate_neighbors(x, y)
+    activate_neighbors(x1, y1)
+
+def move_destroy(x, y, x1, y1):
     grid_value[x1, y1] = 0
     grid_color[x1, y1] = (0,0,0)
 
     grid_value[x, y] = 0
     grid_color[x, y] = (0,0,0)
 
-    mark_in_active_grid(x, y)
-    mark_in_active_grid(x1, y1)
+    activate_neighbors(x, y)
+    activate_neighbors(x1, y1)
 
 def move(x, y, dx=0, dy=0):
     mx, my = x + dx, y + dy
 
-    if not (0 <= mx < grid_width and 0 <= my < grid_height):
+    if not (0 <= mx < grid_w and 0 <= my < grid_h):
         return False
 
     target_val = grid_value[mx, my]
     current_val = grid_value[x, y]
 
+    # move if empty
     if target_val == 0:
-        swap(x, y, mx, my)
+        move_swap(x, y, mx, my)
         return True
 
     current_denser = blocks[current_val]['density'] > blocks[target_val]['density']
     if current_denser:
-
+        # destroy if capable
         if blocks[current_val]['ability'] == 'destroy':
-            destroy(x, y, mx, my)
+            move_destroy(x, y, mx, my)
             return True
 
-        # Standard Density Swap (sand swaps water)
-        swap(x, y, mx, my)
+        # Density move_swap (sand move_swaps water)
+        move_swap(x, y, mx, my)
         return True
 
     return False
 
-def place_block(x, y):
-    if not grid_value[grid_x, grid_y] or not selected_block:
-        grid_value[grid_x, grid_y] = selected_block
-        grid_color[grid_x, grid_y] = get_close_color(selected_block)
-        mark_in_active_grid(grid_x,grid_y)
+def draw_block(x, y):
+    value = grid_value[x, y]
+    if not value: return
 
-    # add neighbour
-    for dx, dy in brushes[selected_brush]:
-        if random.randint(0, 4) == 0:continue
-        
-        mx, my = x + dx, y + dy
-        if 0 <= mx < grid_width and 0 <= my < grid_height:
-            mark_in_active_grid(mx,my)
-            neighbors_color = get_close_color(selected_block)
-            if not grid_value[mx, my] or not selected_block:
-                grid_value[mx, my] = selected_block
-                grid_color[mx, my] = neighbors_color
+    rect = pygame.Rect(x * block_size , overlay_h + y * block_size, block_size, block_size)
+    width = 1 if debug_mode and grid_active[x, y] else 0
 
-# direct draw helper of game
-def draw_block(x,y):
-    screen_y = overlay_h + block_size * y
-    screen_x = block_size * x 
-
-    # block
-    if not grid_color[x, y].all():
-        grid_color[x, y] = get_close_color(grid_value[x, y])
-    
-    # draw
-    if debug_mode and grid_active[x, y]:
-        pygame.draw.rect(screen, grid_color[x, y], pygame.Rect(screen_x, screen_y, block_size, block_size),2)
-    else:
-        pygame.draw.rect(screen, grid_color[x, y], pygame.Rect(screen_x, screen_y, block_size, block_size))
+    pygame.draw.rect(screen, grid_color[x, y], rect, width)
 
 # simple abbrevation functions
 move_up  = lambda x,y : move(x,y,0,-1)
@@ -491,6 +482,8 @@ def simulation_block(x, y):
         else:
             if move_down_left(x, y) or move_left(x, y): return
             if move_down_right(x, y) or move_right(x, y): return
+        
+        # make acid check above too
         if state == 'liquid' and block['ability'] == 'destroy':
             move_up(x, y)
 
@@ -504,74 +497,88 @@ def simulation_block(x, y):
             if move_up_left(x, y) or move_left(x, y): return
             if move_up_right(x, y) or move_right(x, y): return
 
-# right
-def game():
-    pygame.draw.rect(screen, theme_bg, grid_rect)
 
-    # Placement logic
-    if grid_rect.collidepoint(mouse_x, mouse_y) and mouser_pressed:
-        if 0 <= grid_x < grid_width and 0 <= grid_y < grid_height:           
-            place_block(grid_x,grid_y)
+def simulation():
+    for gy in range(chunks_height - 1, -1, -1):
+        for gx in range(chunks_width):
 
-    # loop bottom to top
-    for y in range(grid_height - 1, -1, -1):
-        x_order = list(range(grid_width))
-        random.shuffle(x_order)
+            # Skip inactive chunks
+            if not chunk_active[gx, gy]:
+                continue
 
-        for x in x_order:
-            if grid_value[x, y]:
-                # draw
-                draw_block(x, y)
+            # Compute chunk bounds
+            x_start = gx * chunk_size
+            x_end   = (gx + 1) * chunk_size
+            y_start = gy * chunk_size
+            y_end   = (gy + 1) * chunk_size
 
-                # Simulation
-                if not game_paused:
-                    simulation_block(x, y)
-    
-    # debug_mode
-    if debug_mode:
-        draw_chunks(color=theme_muted)
-    #     pygame.draw.circle(screen, theme_muted, (mouse_x, mouse_y), block_size * (selected_brush + 1), 1)
-    
+            chunk_rect = pygame.Rect(x_start * block_size, overlay_h + y_start * block_size, chunk_size * block_size, chunk_size * block_size)
+            pygame.draw.rect(screen, theme_bg, chunk_rect)
+
+            # Bottom to Top
+            for y in range(y_end - 1, y_start - 1, -1):
+
+                x_order = list(range(x_start, x_end))
+                random.shuffle(x_order)
+
+                for x in x_order:
+                    if grid_value[x, y]:
+                        if chunk_active[gx, gy]:
+                            draw_block(x, y)
+
+                        if not game_paused:
+                            simulation_block(x, y)
+
+
 # --- Main loop ---
+screen.fill(theme_bg)
 while run:   
     # --- Variables ---
     tooltip_text = None
     mouse_clicked = False
-    direction = not direction  # not sure if you need to toggle every frame
-    mouse_x, mouse_y = pygame.mouse.get_pos()
-    grid_x, grid_y = get_grid_cords()
+    direction = not direction
+    
     
     # --- Event handling ---
     for event in pygame.event.get():
-        # handle buttons
+        
         for btn in button_list:
             btn.handle_event(event)
         
         if event.type == pygame.QUIT:
             run = False
+
+        if event.type == pygame.MOUSEMOTION:
+            mouse_x, mouse_y = pygame.mouse.get_pos()
+            update_grid_cords(mouse_x, mouse_y)
+
         elif event.type == pygame.MOUSEBUTTONDOWN:
             mouser_pressed = True
         elif event.type == pygame.MOUSEBUTTONUP:
             mouser_pressed = False 
 
-    # --- Draw ---
-    game() 
+    # --- Placement ---
+    if grid_rect.collidepoint(mouse_x, mouse_y) and mouser_pressed:
+        if 0 <= grid_x < grid_w and 0 <= grid_y < grid_h:           
+            place_block(grid_x,grid_y)
 
-    # Overlay UI
+    # --- simulate ---
+    simulation()
+
+    # --- Overlay UI ---
     pygame.draw.rect(screen, theme_fg, overlay_rect)
     pygame.draw.line(screen, theme_text, (0, overlay_h), (screen_width, overlay_h))
-    
-    # FPS
+
     fps_text = f"FPS {int(mainclock.get_fps())}"
     screen.blit(
         font.render(fps_text, True, theme_text),
-        (screen_width - font.size(fps_text)[0] - 8, (overlay_h - font.size(fps_text)[1]) // 2)
-    )
+        fps_display_cord)
 
-    # --- Update active blocks ---
+    # --- Update active blocks and chunks for next ---
     if not game_paused:
         grid_active[:] = grid_active_next
         grid_active_next.fill(False)
+
         chunk_active[:] = chunk_active_next
         chunk_active_next.fill(False)
 
@@ -579,106 +586,20 @@ while run:
     hovering_button = False
     for btn in button_list:
         btn.handle_draw()
-        if btn.handle_hover():  # handle_hover should return True if hovered
+        if btn.handle_hover(): 
             hovering_button = True
             if btn.tooltip_text:
-                tooltip_text = btn.tooltip_text  # set tooltip for hovered button
+                tooltip_text = btn.tooltip_text
 
     pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND if hovering_button else pygame.SYSTEM_CURSOR_ARROW)
 
     # --- Tooltips ---
     if tooltip_text:
         text_w, text_h = font.size(tooltip_text)
-        tooltip_rect = pygame.Rect(mouse_x + 16, mouse_y + 16, text_w + 24, text_h + 8)
+        tooltip_rect = pygame.Rect(mouse_x + 16, 20, text_w + 24, text_h + 8)
         pygame.draw.rect(screen, theme_text, tooltip_rect, border_radius=6)
-        screen.blit(font.render(tooltip_text, True, theme_bg), tooltip_rect.topleft + pygame.Vector2(12, 4))
+        screen.blit(font.render(tooltip_text, True, theme_bg), tooltip_rect.topleft + pygame.Vector2(12,4))
 
     # --- Update screen ---
     pygame.display.update()
     mainclock.tick(60)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Simple screenshake manager (Pygame)
-class ScreenShake:
-    def __init__(self):
-        self.time = 0.0
-        self.duration = 0.0
-        self.magnitude = 0.0
-
-    def start(self, duration, magnitude):
-        self.time = 0.0
-        self.duration = duration
-        self.magnitude = magnitude
-
-    def update(self, dt):
-        if self.time < self.duration:
-            self.time += dt
-            t = self.time / self.duration
-            # ease out (quadratic)
-            decay = (1 - t) * (1 - t)
-            import random
-            x = (random.random() * 2 - 1) * self.magnitude * decay
-            y = (random.random() * 2 - 1) * self.magnitude * decay
-            return int(x), int(y)
-        return 0, 0
-
-# Usage in main loop:
-# shake.start(0.18, 8)
-# offset_x, offset_y = shake.update(dt)
-# screen.blit(world_surface, (offset_x, offset_y))
-
-import pygame, random, math
-
-class Particle:
-    def __init__(self, pos, vel, life, color, size):
-        self.pos = pygame.Vector2(pos)
-        self.vel = pygame.Vector2(vel)
-        self.life = life
-        self.max_life = life
-        self.text_color = color
-        self.size = size
-
-    def update(self, dt):
-        self.pos += self.vel * dt
-        self.life -= dt
-        # simple drag
-        self.vel *= 0.98
-
-    def draw(self, surf):
-        alpha = max(0, int(255 * (self.life / self.max_life)))
-        col = (*self.text_color[:3], alpha)
-        s = pygame.Surface((self.size*2, self.size*2), pygame.SRCALPHA)
-        pygame.draw.circle(s, col, (self.size, self.size), self.size)
-        surf.blit(s, (self.pos.x - self.size, self.pos.y - self.size))
-
-# Emitter example: spawn N particles with random velocity
-def emit_explosion(container, pos, n=30):
-    for _ in range(n):
-        angle = random.random() * math.tau
-        speed = random.uniform(60, 240)
-        vel = (math.cos(angle)*speed, math.sin(angle)*speed)
-        p = Particle(pos, vel, life=0.8 + random.random()*0.6, color=(255,160,64), size=random.randint(2,5))
-        container.append(p)
-
-# apply a quick scale animation to a sprite surface
-def squash_stretch(surface, progress, max_scale=1.12):
-    # progress: 0..1 where 0 is start, 1 is end
-    # ease out
-    t = 1 - (1 - progress) * (1 - progress)
-    sx = 1 + (max_scale - 1) * (1 - t)
-    sy = 1 - (max_scale - 1) * (1 - t) * 0.6
-    w, h = surface.get_size()
-    scaled = pygame.transform.smoothscale(surface, (int(w*sx), int(h*sy)))
-    return scaled
