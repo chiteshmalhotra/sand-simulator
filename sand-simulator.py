@@ -55,7 +55,6 @@ run = True
 direction = True
 font = pygame.font.SysFont(None, 24)
 immediate_neighbour = [(-1, -1), (0, -1), (1, -1),(-1,  0),(0,0), (1,  0), (-1,  1), (0,  1), (1,  1)]
-fps_display_cord = (screen_width - 62, (overlay_h - 16) // 2)
 
 # --- user variable ---
 
@@ -77,18 +76,26 @@ tooltip_text = None
 # --- Block data ---
 
 blocks = {
-    0: { "name": "Void",  "color": (255, 255, 255), 
+    0: { "name": "Void",  "color": (255, 255, 255), "moves": [],
         "density": 0, "state": "solid", "ability": None},
-    1: { "name": "sand",  "color": (194, 178, 128), 
+    1: { "name": "sand",  "color": (194, 178, 128), "moves": ["down", "down_diag"],
         "density": 4, "state": "grain", "ability": None},
-    2: { "name": "stone", "color": (110, 110, 110), 
+    2: { "name": "stone", "color": (110, 110, 110), "moves": [],
         "density": 6, "state": "solid", "ability": None},
-    3: { "name": "water", "color": (64, 164, 223), 
+    3: { "name": "water", "color": (64, 164, 223), "moves": ["down", "down_diag", "side"],
         "density": 2, "state": "liquid", "ability": None},
-    4: { "name": "acid",  "color": (57, 255, 20), 
+    4: { "name": "acid",  "color": (57, 255, 20), "moves": ["down", "down_diag", "side", "up"],
         "density": 9, "state": "liquid", "ability": "destroy"},
-    5: { "name": "steam", "color": (220, 220, 220), 
+    5: { "name": "steam", "color": (220, 220, 220), "moves": ["up", "up_diag", "side"],
         "density": 0, "state": "gas", "ability": None}}
+
+moves_dict = {
+    "down": [(0, 1)],
+    "down_diag": [(-1, 1), (1, 1)],
+    "up": [(0, -1)],
+    "up_diag": [(-1, -1), (1, -1)],
+    "side": [(-1, 0), (1, 0)]
+}
 
 # --- Initilize Brush ---
 
@@ -190,9 +197,6 @@ class Button:
 
     def handle_hover(self):
         self.hovered = self.rect.collidepoint((mouse_x, mouse_y))
-        if self.hovered and self.tooltip_text:
-            global tooltip_text
-            tooltip_text = f"{self.tooltip_text}"
         return self.hovered
 
     def handle_event(self, event):
@@ -243,6 +247,8 @@ def pause_game():
 def toggle_debug():
     global debug_mode
     debug_mode = not debug_mode
+    # chunk_active.fill(True)
+    # screen.fill(theme_bg)
 
 def Reset():
     grid_value.fill(0)
@@ -308,11 +314,11 @@ for block_id, block in blocks.items():
             tooltip_text=f"Select {block['name'].capitalize()} ({block_id})" 
         )
     )
-    x += h + padding
+    x += h - 6
 
 x += main_padding
 
-# brush selectot btns
+# brush selector btns
 brush_group = Radiogroup("brush_group")
 
 for key in brushes:
@@ -329,9 +335,9 @@ for key in brushes:
             tooltip_text=f"Select brush size ({key.capitalize()})"
         )
     )
-    x += h + padding
+    x += h - 6
 
-# --- Small helpers ---
+# --- Functions ---
 
 get_close_color = lambda block : random.choice(block_palette[block])
 
@@ -347,10 +353,6 @@ def update_grid_cords(x = mouse_x, y = mouse_y):
     if 0 <= temp_grid_x < grid_w and 0 <= temp_grid_y < grid_h:
         grid_x, grid_y = temp_grid_x, temp_grid_y
 
-def draw_text(text, x, y, color=theme_muted):
-    text_surface = font.render(text, True, color)
-    screen.blit(text_surface, (x, y))
-
 # --- Simulation ---
 
 def activate_neighbors(x, y, neighbours_offset = immediate_neighbour):
@@ -362,8 +364,8 @@ def activate_neighbors(x, y, neighbours_offset = immediate_neighbour):
                 grid_active_next[mx, my] = True
 
         # activate neighbour Chunks 
-        chunk_x = (x + dx) // chunk_size
-        chunk_y = (y + dy) // chunk_size
+        chunk_x = x // chunk_size + dx
+        chunk_y = y // chunk_size + dy
         if 0 <= chunk_x < chunk_w and 0 <= chunk_y < chunk_h:
             chunk_active_next[chunk_x, chunk_y] = True
 
@@ -388,6 +390,15 @@ def place_block(x, y):
                 grid_color[mx, my] = neighbors_color
 
 
+def draw_block(x, y):
+    value = grid_value[x, y]
+    if not value: return
+
+    rect = pygame.Rect(x * block_size , overlay_h + y * block_size, block_size, block_size)
+    width = 1 if debug_mode and grid_active[x, y] else 0
+    pygame.draw.rect(screen, grid_color[x, y], rect, width)
+
+    
 def move_swap(x, y, x1, y1):  
     grid_value[x, y], grid_value[x1, y1] = grid_value[x1, y1], grid_value[x, y]
     grid_color[x, y], grid_color[x1, y1] = grid_color[x1, y1].copy(), grid_color[x, y].copy()
@@ -432,79 +443,23 @@ def move(x, y, dx=0, dy=0):
 
     return False
 
-def draw_block(x, y):
-    value = grid_value[x, y]
-    if not value: return
+def simulate_block(x, y):
+    global direction
 
-    rect = pygame.Rect(x * block_size , overlay_h + y * block_size, block_size, block_size)
-    width = 1 if debug_mode and grid_active[x, y] else 0
-
-    pygame.draw.rect(screen, grid_color[x, y], rect, width)
-
-# simple abbrevation functions
-move_up  = lambda x,y : move(x,y,0,-1)
-move_up_left  = lambda x,y : move(x,y,-1,-1)
-move_up_right = lambda x,y : move(x,y,1,-1)
-move_left  = lambda x,y : move(x,y,-1,0)
-move_right = lambda x,y : move(x,y,1,0)
-move_down  = lambda x,y : move(x,y,0,1)
-move_down_left  = lambda x,y : move(x,y,-1,1)
-move_down_right = lambda x,y : move(x,y,1,1)
-
-# direct simulate helper of game
-def simulation_block(x, y):
-    block = blocks[grid_value[x, y]]
-    state = block['state']
-    
     if not grid_active[x, y]:
         return
 
-    # Solid (Stone) doesn't move
-    if state == 'solid':
-        return
+    for move_type in blocks[grid_value[x, y]]["moves"]:
+        moves = moves_dict[move_type]
+        order = moves if direction else moves[::-1]
 
-    # Grain (Sand) logic: Down, then Down-Diagonal
-    if state == 'grain':
-        if move_down(x, y): return
-        if direction:
-            if move_down_right(x, y): return
-            if move_down_left(x, y): return
-        else:
-            if move_down_left(x, y): return
-            if move_down_right(x, y): return
-
-    # Liquid (Water/Acid) logic: Down, Down-Diagonal, then Horizontal
-    elif state == 'liquid':
-        if move_down(x, y): return
-        if direction:
-            if move_down_right(x, y) or move_right(x, y): return
-            if move_down_left(x, y) or move_left(x, y): return
-        else:
-            if move_down_left(x, y) or move_left(x, y): return
-            if move_down_right(x, y) or move_right(x, y): return
-        
-        # make acid check above too
-        if state == 'liquid' and block['ability'] == 'destroy':
-            move_up(x, y)
-
-    # Gas (Steam) logic: Up, then Up-Diagonal or Horizontal
-    elif state == 'gas':
-        if move_up(x, y): return
-        if direction:
-            if move_up_right(x, y) or move_right(x, y): return
-            if move_up_left(x, y) or move_left(x, y): return
-        else:
-            if move_up_left(x, y) or move_left(x, y): return
-            if move_up_right(x, y) or move_right(x, y): return
-
+        for dx, dy in order:
+            if move(x, y, dx, dy):
+                return
 
 def simulation():
     for gy in range(chunk_h - 1, -1, -1):
         for gx in range(chunk_w):
-            
-            # Skip inactive chunks
-            if not chunk_active[gx, gy]:
-                continue
 
             # Compute chunk bounds
             x_start = gx * chunk_size
@@ -512,9 +467,17 @@ def simulation():
             y_start = gy * chunk_size
             y_end   = (gy + 1) * chunk_size
 
-            # clear bg of active chunk
+            # Skip inactive chunks
             chunk_rect = pygame.Rect(x_start * block_size, overlay_h + y_start * block_size, chunk_size * block_size, chunk_size * block_size)
-            pygame.draw.rect(screen, theme_bg, chunk_rect)
+           
+            if not chunk_active[gx, gy]:
+                if debug_mode:
+                    pygame.draw.rect(screen, theme_fg, chunk_rect,1)
+                continue
+            else:
+                pygame.draw.rect(screen, theme_bg, chunk_rect)
+                if debug_mode:
+                    pygame.draw.rect(screen, theme_danger, chunk_rect,1)
 
             # Bottom to Top
             for y in range(y_end - 1, y_start - 1, -1):
@@ -528,7 +491,7 @@ def simulation():
                             draw_block(x, y)
 
                         if not game_paused:
-                            simulation_block(x, y)
+                            simulate_block(x, y)
 
 
 # --- Main loop ---
@@ -557,7 +520,7 @@ while run:
             mouser_pressed = True
         elif event.type == pygame.MOUSEBUTTONUP:
             mouser_pressed = False 
-
+    
     # --- Placement ---
     if grid_rect.collidepoint(mouse_x, mouse_y) and mouser_pressed:
         if 0 <= grid_x < grid_w and 0 <= grid_y < grid_h:           
@@ -570,9 +533,11 @@ while run:
     pygame.draw.rect(screen, theme_fg, overlay_rect)
     pygame.draw.line(screen, theme_text, (0, overlay_h), (screen_width, overlay_h))
 
-    screen.blit(
-        font.render(f"FPS {fps}", True, theme_text),
-        fps_display_cord)
+    # --- Debug UI ---
+    if debug_mode:
+        debug_text = f"FPS {fps} AC {np.count_nonzero(chunk_active):03d} AB {np.count_nonzero(grid_active):04d}"
+        text_surface = font.render(debug_text, True, theme_text)
+        screen.blit(text_surface, (screen_width - text_surface.get_width() - 10 , (overlay_h - text_surface.get_height()) // 2))
 
     # --- Update active blocks and chunks for next ---
     if not game_paused:
@@ -595,8 +560,7 @@ while run:
 
     # --- Tooltips ---
     if tooltip_text:
-        text_w, text_h = font.size(tooltip_text)
-        tooltip_rect = pygame.Rect(mouse_x + 16, 20, text_w + 24, text_h + 8)
+        tooltip_rect = pygame.Rect(mouse_x + 16, 20, font.size(tooltip_text)[0] + 24, font.size(tooltip_text)[1] + 8)
         pygame.draw.rect(screen, theme_text, tooltip_rect, border_radius=6)
         screen.blit(font.render(tooltip_text, True, theme_bg), tooltip_rect.topleft + pygame.Vector2(12,4))
 
