@@ -1,85 +1,144 @@
-# PySand: A Cellular Automata Sandbox
-
-**PySand** is a real-time 2D physics simulation built with Python and Pygame. It simulates the behavior of different materials—solids, liquids, and gases—based on density and state-of-the-art cellular automata rules.
-
-Default view
-<img width="1075" height="882" alt="default" src="https://github.com/user-attachments/assets/0ba049e7-5790-4383-a682-c32b06982951" />
-
-Dark theme + debug mode
-<img width="1075" height="882" alt="darkmode_with_debugmenu" src="https://github.com/user-attachments/assets/dab6a9dc-bcca-48f7-bd9a-d20e8abed4cf" />
-
-## 🚀 Features
-
-* **Diverse Materials**: Each block has unique properties including density, state (solid, liquid, gas), and special abilities (e.g., Acidic destruction).
-* **Dynamic Physics**
-* **Grains (Sand)**: Fall and pile up based on gravity.
-* **Liquids (Water, Acid)**: Flow horizontally and fill containers.
-* **Gases (Steam)**: Rise and diffuse upwards.
-
-
-* **Optimized Rendering**: Uses an "Active Grid" system to only process blocks that need to move, improving performance.
-* **Debug Suite**: Real-time FPS monitoring, active block counts, and grid-line overlays.
-* **Dual Themes**: Switch between Dark and Light modes on the fly.
+Got it. Here’s a **cleaner, tighter README**. Shorter, calmer, and very “this is a dev project, not a startup pitch”.
 
 ---
 
-## 🛠️ Controls
+# Sand Simulator 3000
+
+A falling-sand style simulation written in Python using Pygame and NumPy.
+
+You can place different materials on a grid and watch them interact based on simple rules like gravity, density, and allowed movement directions. The simulation uses a chunk system so only active areas are updated each frame.
+
+---
+### Latest Images
+
+<img width="336" height="249" alt="normalmode_28feb2026" src="https://github.com/user-attachments/assets/5f61fbb7-8cf7-4de7-a346-ab9cbe0b2619" />
+
+<img width="336" height="249" alt="darkmode_with_debugmode_28feb2026" src="https://github.com/user-attachments/assets/aa93c8ef-3abd-4524-845a-cd58abc1eab2" />
+
+### Previous Images
+
+<img width="358" height="294" alt="normalmode_23feb2026" src="https://github.com/user-attachments/assets/0ba049e7-5790-4383-a682-c32b06982951" />
+
+<img width="358" height="294" alt="darkmode_with_debugmode_23feb2026" src="https://github.com/user-attachments/assets/dab6a9dc-bcca-48f7-bd9a-d20e8abed4cf" />
+
+---
+
+## Features
+
+* Chunk-based simulation for performance
+* Multiple materials with different behavior:
+  * Sand
+  * Water
+  * Stone
+  * Acid
+  * Lava
+  * Steam
+
+* Brush sizes (small, medium, large)
+* Mouse painting with variation
+* Keyboard shortcuts
+* Debug mode with active chunk and block visualization
+* Light / dark theme toggle
+* Minimal UI with tooltips
+
+---
+
+## Controls
 
 ### Mouse
 
-* **Left Click**: Place selected material.
-* **UI Interaction**: Click buttons in the sidebar to toggle simulation settings.
+* Left click / drag – Place blocks
 
 ### Keyboard
 
-* `0`: Air (Eraser)
-* `1`: Sand
-* `2`: Stone
-* `3`: Water
-* `4`: Acid
-* `5`: Steam
+* Space – Pause / resume
+* T – Toggle theme
+* D – Toggle debug mode
+* Backspace – Clear grid
 
+### Blocks
 
-* **Space / Enter**: Pause/Resume the simulation.
+* Number keys 0–6 – Select block type
 
----
+### Brush size
 
-## 🧬 Simulation Logic
-
-The simulation operates on a grid-based movement system. Every frame, the engine checks the "Density" of a block and its neighbors to decide if a swap should occur.
-
-| Material | State | Density | Behavior |
-| --- | --- | --- | --- |
-| **Stone** | Solid | 6 | Static; does not move. |
-| **Sand** | Grain | 4 | Falls down; slides off slopes. |
-| **Water** | Liquid | 2 | Falls down; spreads left and right. |
-| **Acid** | Liquid | 9 | Heavy liquid; destroys materials it touches. |
-| **Steam** | Gas | 0 | Rises up and diffuses. |
+* S – Small
+* M – Medium
+* L – Large
 
 ---
 
-## 📦 Installation
+## Debug Mode
 
-1. **Prerequisites**: Ensure you have Python 3.x installed.
-2. **Install Dependencies**:
+Debug mode shows:
+
+* Active chunks
+* Active blocks
+* FPS, active chunk count, and active block count
+
+Useful for understanding performance and simulation behavior.
+
+---
+
+## How It Works (Brief)
+
+* The world is a grid of blocks
+* The grid is divided into chunks
+* Only active chunks are simulated and redrawn
+* Blocks activate nearby blocks and chunks when they move
+* Movement depends on material density and allowed directions
+
+---
+
+## Requirements
+
+* Python 3.x
+* Pygame
+* NumPy
+
+Install dependencies:
+
 ```bash
 pip install pygame numpy
-
 ```
-
-
-3. **Run the Game**:
-```bash
-python main.py
-
-```
-
-
 
 ---
 
-## 🏗️ Future Roadmap
+## Run
 
-* [ ] **Heat Exchange**: Adding temperature variables to turn water into steam or lava into stone.
-* [ ] **Chunking**: Further optimization for larger screen sizes.
-* [ ] **Multi-Brush**: Larger brush sizes for faster world building.
+```bash
+python main.py
+```
+
+---
+
+## Notes
+
+This is a learning and experimentation project which is being worked on as hobby.
+Currently in early phases. So the focus is on simulation logic and performance, not polish.
+If you experience some issue pls contact me.
+
+---
+
+## Known Issues
+
+Minor input latency
+Mouse clicks and button actions may feel slightly delayed during heavy simulation. This happens because simulation and rendering are done in the same frame.
+
+Performance drops with large active areas
+When many chunks become active at once, FPS can drop, especially on lower-end systems.
+
+No save / load support
+The simulation state is not persistent. Clearing or closing the app resets everything.
+
+Single-threaded simulation
+All logic runs on the main thread. There is no background processing.
+
+No mobile or touch support
+Designed for desktop mouse and keyboard only.
+
+Limited material interactions
+Material behavior is intentionally simple. Some interactions may look unrealistic.
+
+UI scaling is fixed
+The interface is not responsive to window resizing.
