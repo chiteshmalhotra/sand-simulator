@@ -55,7 +55,8 @@ theme_danger  = (226, 117, 117)
 run = True
 direction = True
 font = pygame.font.SysFont(None, 24)
-immediate_neighbour = [(-1, -1), (0, -1), (1, -1),(-1,  0),(0,0), (1,  0), (-1,  1), (0,  1), (1,  1)]
+font_sm = pygame.font.SysFont(None, 16)
+immediate_neighbour = [(-1, -1), (0, -1), (1, -1),(-1,  0), (0, 0), (1,  0), (-1,  1), (0,  1), (1,  1)]
 
 # --- user variable ---
 
@@ -64,6 +65,9 @@ mouse_y = 0
 
 grid_x = 0 
 grid_y = 0
+
+last_grid_x = None
+last_grid_y = None
 
 selected_block = 1
 
@@ -87,7 +91,9 @@ blocks = {
         "density": 2, "state": "liquid", "ability": None},
     4: { "name": "acid",  "color": (57, 255, 20), "moves": ["down", "down_diag", "side", "up"],
         "density": 9, "state": "liquid", "ability": "destroy"},
-    5: { "name": "steam", "color": (220, 220, 220), "moves": ["up", "up_diag", "side"],
+    5: { "name": "Lava", "color": (207, 16, 32), "moves": ["down", "down_diag", "side"],
+        "density": 0, "state": "gas", "ability": None},
+    6: { "name": "steam", "color": (220, 220, 220), "moves": ["up", "up_diag", "side"],
         "density": 0, "state": "gas", "ability": None}}
 
 moves_dict = {
@@ -290,7 +296,7 @@ for key in brushes.keys():
 # Group 4: github button 
 w = font.size("View on github")[0] + 20
 btn = Button(pygame.Rect(screen_width - w - 12, y, w, h), action=view_github, 
-             label="View on github", toggled=None, color=theme_success)
+             label="Open github", toggled=None, color=theme_success)
 button_list.append(btn)
 
 # --- Functions ---
@@ -326,22 +332,15 @@ def activate_neighbors(x, y, neighbours_offset = immediate_neighbour):
 
 
 def place_block(x, y):
-    # place center
-    if not grid_value[grid_x, grid_y] or not selected_block:
-        grid_value[grid_x, grid_y] = selected_block
-        grid_color[grid_x, grid_y] = get_close_color(selected_block)
-
-    # place brush
     for dx, dy in brushes[selected_brush]:
         if random.random() < 0.2: continue
-        
+
         mx, my = x + dx, y + dy
         if 0 <= mx < grid_w and 0 <= my < grid_h:
             if not grid_value[mx, my] or not selected_block:
                 grid_value[mx, my] = selected_block
                 grid_color[mx, my] = get_close_color(selected_block)
-                activate_neighbors(mx,my)
-
+                activate_neighbors(mx, my)
 
 def draw_block(x, y):
     if grid_value[x, y]:
@@ -452,6 +451,8 @@ while run:
     tooltip_text = None
     hovering_button = False
     direction = not direction
+    mouse_x, mouse_y = pygame.mouse.get_pos()
+    update_grid_cords(mouse_x, mouse_y)
     
     # --- Event handling ---
     for event in pygame.event.get():
@@ -461,10 +462,6 @@ while run:
         
         if event.type == pygame.QUIT:
             run = False
-
-        if event.type == pygame.MOUSEMOTION:
-            mouse_x, mouse_y = pygame.mouse.get_pos()
-            update_grid_cords(mouse_x, mouse_y)
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             mouser_pressed = True
@@ -485,9 +482,9 @@ while run:
 
     # --- Debug UI ---
     if debug_mode:
-        debug_text = f"FPS {int(mainclock.get_fps())} AC {np.count_nonzero(chunk_active):03d} AB {np.count_nonzero(grid_active):04d}"
-        text_surface = font.render(debug_text, True, theme_text)
-        screen.blit(text_surface, (screen_width - text_surface.get_width() - 10 , (overlay_h - text_surface.get_height()) // 2))
+        debug_text = f'''FPS {int(mainclock.get_fps())}        Active Chunks {np.count_nonzero(chunk_active):04d}        Active Blocks {np.count_nonzero(grid_active):05d}'''
+        text_surface = font_sm.render(debug_text, True, theme_text)
+        screen.blit(text_surface, (12, overlay_h - (text_surface.get_height())))
 
     # --- Update active blocks & chunks for next frame ---
     if not game_paused:
