@@ -100,9 +100,9 @@ blocks = {
     3: { "name": "water", "color": (64, 164, 223), "moves": ["down", "down_diag", "side"],
         "density": 2, "state": "liquid", "ability": None},
     4: { "name": "acid",  "color": (57, 255, 20), "moves": ["down", "down_diag", "side", "up"],
-        "density": 9, "state": "liquid", "ability": "destroy"},
-    5: { "name": "Lava", "color": (207, 16, 32), "moves": ["down", "down_diag", "side"],
-        "density": 7, "state": "gas", "ability": None},
+        "density": 5, "state": "liquid", "ability": "destroy"},
+    5: { "name": "Lava", "color": (207, 16, 32), "moves": ["down", "down_diag", "side","up"],
+        "density": 4, "state": "gas", "ability": "evaporate"},
     6: { "name": "steam", "color": (220, 220, 220), "moves": ["up", "up_diag", "side"],
         "density": 0, "state": "gas", "ability": None}}
 
@@ -366,13 +366,22 @@ def move_swap(x, y, x1, y1):
     activate_neighbors(x1, y1)
 
 def move_destroy(x, y, x1, y1):
-    if random.random() < 0.05: return
-
     grid_value[x1, y1] = 0
     grid_color[x1, y1] = (0,0,0)
     
     grid_value[x, y] = 0
     grid_color[x, y] = (0,0,0)
+
+    activate_neighbors(x, y)
+    activate_neighbors(x1, y1)
+
+def move_evaporate(x, y, x1, y1):
+    grid_value[x1, y1] = 6
+    grid_color[x1, y1] = get_close_color(6)
+    
+    if random.random() < 0.5:
+        grid_value[x, y] = 0
+        grid_color[x, y] = (0,0,0)
 
     activate_neighbors(x, y)
     activate_neighbors(x1, y1)
@@ -398,6 +407,10 @@ def move(x, y, dx=0, dy=0):
         # destroy if capable
         if blocks[current_val]['ability'] == 'destroy':
             move_destroy(x, y, mx, my)
+            return True
+        
+        if blocks[current_val]['ability'] == 'evaporate' and target_val == 3:
+            move_evaporate(x, y, mx, my)
             return True
 
         # Density move_swap (sand move_swaps water)
