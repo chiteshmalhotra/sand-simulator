@@ -21,7 +21,7 @@ block_size = 5
 chunk_size = 10
 
 # overlay
-overlay_h = 50
+overlay_h = chunk_size * block_size
 overlay_rect = pygame.Rect(0, 0, screen_width, overlay_h)
 
 # grid
@@ -40,6 +40,16 @@ chunk_w = grid_w // chunk_size
 chunk_h = grid_h // chunk_size
 chunk_active = np.zeros((chunk_w, chunk_h), dtype=bool)
 chunk_active_next = np.zeros((chunk_w, chunk_h), dtype=bool)
+
+# draw stack
+block_rect_cache = np.empty((grid_w, grid_h), dtype=object)
+for x, y in np.ndindex(block_rect_cache.shape):
+    block_rect_cache[x, y] = pygame.Rect(x * block_size, overlay_h + y * block_size, block_size, block_size)
+
+
+chunk_rect_cache = np.empty((chunk_w, chunk_h), dtype=object)
+for x, y in np.ndindex(chunk_rect_cache.shape):
+    chunk_rect_cache[x, y] = pygame.Rect(x * block_size * chunk_size, overlay_h + y * block_size  * chunk_size, block_size * chunk_size, block_size * chunk_size)
 
 # --- Color variables ---
 
@@ -92,7 +102,7 @@ blocks = {
     4: { "name": "acid",  "color": (57, 255, 20), "moves": ["down", "down_diag", "side", "up"],
         "density": 9, "state": "liquid", "ability": "destroy"},
     5: { "name": "Lava", "color": (207, 16, 32), "moves": ["down", "down_diag", "side"],
-        "density": 0, "state": "gas", "ability": None},
+        "density": 7, "state": "gas", "ability": None},
     6: { "name": "steam", "color": (220, 220, 220), "moves": ["up", "up_diag", "side"],
         "density": 0, "state": "gas", "ability": None}}
 
@@ -294,9 +304,9 @@ for key in brushes.keys():
     x += h - padding
 
 # Group 4: github button 
-w = font.size("View on github")[0] + 20
+w = font.size("Github")[0] + 20
 btn = Button(pygame.Rect(screen_width - w - 12, y, w, h), action=view_github, 
-             label="Open github", toggled=None, color=theme_success)
+             label="Github", toggled=None, color=theme_success)
 button_list.append(btn)
 
 # --- Functions ---
@@ -343,10 +353,9 @@ def place_block(x, y):
                 activate_neighbors(mx, my)
 
 def draw_block(x, y):
-    if grid_value[x, y]:
-        rect = pygame.Rect(x * block_size , overlay_h + y * block_size, block_size, block_size)
-        width = 1 if debug_mode and grid_active[x, y] else 0
-        pygame.draw.rect(screen, grid_color[x, y], rect, width)        
+    if not grid_value[x, y]: return
+    width = int(debug_mode and grid_active[x, y])
+    pygame.draw.rect(screen, grid_color[x, y], block_rect_cache[x,y], width)  
 
     
 def move_swap(x, y, x1, y1):  
@@ -357,9 +366,11 @@ def move_swap(x, y, x1, y1):
     activate_neighbors(x1, y1)
 
 def move_destroy(x, y, x1, y1):
+    if random.random() < 0.05: return
+
     grid_value[x1, y1] = 0
     grid_color[x1, y1] = (0,0,0)
-
+    
     grid_value[x, y] = 0
     grid_color[x, y] = (0,0,0)
 
@@ -421,7 +432,7 @@ def simulation():
             y_start = gy * chunk_size
             y_end   = (gy + 1) * chunk_size
 
-            chunk_rect = pygame.Rect(x_start * block_size, overlay_h + y_start * block_size, chunk_size * block_size, chunk_size * block_size)
+            chunk_rect = chunk_rect_cache[gx, gy]
             is_chunk_active = chunk_active[gx, gy]
 
             if is_chunk_active:
@@ -482,7 +493,7 @@ while run:
 
     # --- Debug UI ---
     if debug_mode:
-        debug_text = f'''FPS {int(mainclock.get_fps())}        Active Chunks {np.count_nonzero(chunk_active):04d}        Active Blocks {np.count_nonzero(grid_active):05d}'''
+        debug_text = f'''FPS {int(mainclock.get_fps())}    Active Chunks {np.count_nonzero(chunk_active):04d}    Active Blocks {np.count_nonzero(grid_active):05d}'''
         text_surface = font_sm.render(debug_text, True, theme_text)
         screen.blit(text_surface, (12, overlay_h - (text_surface.get_height())))
 
